@@ -1,3 +1,4 @@
+<pre>
 Author: Philip Matuskiewicz
 Date: 5/24/2016
 
@@ -31,3 +32,4 @@ awstats -update -config=example.com -LogFile="/root/logresolvemerge.pl datafiles
 A sample ElasticLoadBalancer log line looks like:
 2016-05-12T21:48:58.253468Z appelb-pr-ElasticL-3M29U6FNWKZ7 62.114.132.221:32658 10.167.134.188:80 0.000024 0.029101 0.000023 200 200 0 839 "GET http://api.example.com:80/api/data.json?key=nebwh37443&LineRef=8 HTTP/1.1" "Server/1 myLib/17 Server/1 Device/Server" - -
 
+</pre>
