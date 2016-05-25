@@ -1,0 +1,8 @@
+[main]
+ROOTBUCKET = site-logs
+PATH = data/
+AWS_ACCESS_KEY = 
+AWS_SECRET_KEY = 
+DOMAIN = largecloudfrontsite.example.net
+LOGRESOLV = /usr/bin/logresolvemerge.pl
+PROCFILE = lastposition.txt
