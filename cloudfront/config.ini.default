@@ -4,5 +4,5 @@ PATH = data/
 AWS_ACCESS_KEY = 
 AWS_SECRET_KEY = 
 DOMAIN = largecloudfrontsite.example.net
-LOGRESOLV = /usr/bin/logresolvemerge.pl
+LOGRESOLV = /usr/share/awstats/tools/logresolvemerge.pl
 PROCFILE = lastposition.txt
