@@ -11,7 +11,7 @@ Author: Philip Matuskiewicz - philip.matuskiewicz@nyct.com
 
 Changes:
 	5/14/16 - Initial Script
-
+	5/28/16 - Configuration added, Parameters to compress individually added (external coordinator)
 	
 '''
 
@@ -29,15 +29,15 @@ import configparser
 
 CONFIG = configparser.ConfigParser()
 
-if len(sys.argv) == 2:
+if len(sys.argv) == 3:
         inputini = sys.argv[1];
         if inputini.endswith(".ini"):
                 CONFIG.read(inputini)
         else:
-                print ("usage: ./elb_compress.py <configfile>")
+                print ("usage: ./elb_compress.py <configfile> <date_to_handle_in_MMDDYYYY>")
                 sys.exit(0)
 else:
-        print ("usage: ./elb_compress.py <configfile>")
+        print ("usage: ./elb_compress.py <configfile> <date_to_handle_in_MMDDYYYY>")
         sys.exit(0)
 
 #Load configuration from ini file
@@ -48,8 +48,7 @@ DST_PATH = CONFIG.get('main', 'DST_PATH')
 DST_AWS_ACCESS_KEY = CONFIG.get('main', 'DST_AWS_ACCESS_KEY')
 DST_AWS_SECRET_KEY = CONFIG.get('main', 'DST_AWS_SECRET_KEY')
 REMOVE_QUERY_STRING_KEYS = CONFIG.get('main', 'REMOVE_QUERY_STRING_KEYS').split(",")
-ALL_FINISHED_FILE = CONFIG.get('main', 'ALL_FINISHED_FILE') # appears almost immediately, lists all of the completed files (for deletion of partial files)
-PROCESSING_COMPLETE_FILE = CONFIG.get('main', 'PROCESSING_COMPLETE_FILE') # appears if all of the files have been successfully completed (no more processing for a day)
+PROCESSING_STATUS_FILE = CONFIG.get('main', 'PROCESSING_STATUS_FILE') # contains all files that are finished, contains DONE if all processing is done
 #this script does not process anything from the current day due to added logic to keep track of hourly file dumps
 
 DSTDIR = ""
