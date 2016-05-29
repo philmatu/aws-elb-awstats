@@ -1,9 +1,10 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 '''
 ***
-ELB Log Compressor script to be run on spot instances (NOT FINISHED YET)
+ELB Log Compressor script
 Takes logs from a given directory and places a cleaned gzip of them in another s3 directory (which will also be compatible with awstats)
 Works across accounts also!
+Meant for spot instances, meaning a text file of finished files will be updated as files are complete, incase terminated prematurely)
 ***
 
 Author: Philip Matuskiewicz - philip.matuskiewicz@nyct.com       
@@ -14,40 +15,48 @@ Changes:
 	
 '''
 
-import concurrent.futures
 import os
 import sys
 import time
-import signal
-import atexit
+import boto
 from boto.s3.key import Key
 import smart_open
-import boto
-import threading
-import shutil
-from urlparse import urlparse, parse_qsl, urlunparse
-from urllib import urlencode
-import datetime
+import concurrent.futures
 import shlex
 import re
+from urllib.parse import urlencode, urlparse, parse_qsl, urlunparse
+import configparser
 
-#CONFIG
-SRC_PATH = "example-bucket/data/"
-SRC_AWS_ACCESS_KEY = ""
-SRC_AWS_SECRET_KEY = ""
+CONFIG = configparser.ConfigParser()
 
-DST_PATH = "example-bucket/data-processed/"
-DST_AWS_ACCESS_KEY = ""
-DST_AWS_SECRET_KEY = ""
+if len(sys.argv) == 2:
+        inputini = sys.argv[1];
+        if inputini.endswith(".ini"):
+                CONFIG.read(inputini)
+        else:
+                print ("usage: ./elb_compress.py <configfile>")
+                sys.exit(0)
+else:
+        print ("usage: ./elb_compress.py <configfile>")
+        sys.exit(0)
 
-REMOVE_QUERY_STRING_KEYS = ["callback"]
-#ENDCONFIG
+#Load configuration from ini file
+SRC_PATH = CONFIG.get('main', 'SRC_PATH')
+SRC_AWS_ACCESS_KEY = CONFIG.get('main', 'SRC_AWS_ACCESS_KEY')
+SRC_AWS_SECRET_KEY = CONFIG.get('main', 'SRC_AWS_SECRET_KEY')
+DST_PATH = CONFIG.get('main', 'DST_PATH')
+DST_AWS_ACCESS_KEY = CONFIG.get('main', 'DST_AWS_ACCESS_KEY')
+DST_AWS_SECRET_KEY = CONFIG.get('main', 'DST_AWS_SECRET_KEY')
+REMOVE_QUERY_STRING_KEYS = CONFIG.get('main', 'REMOVE_QUERY_STRING_KEYS').split(",")
+ALL_FINISHED_FILE = CONFIG.get('main', 'ALL_FINISHED_FILE') # appears almost immediately, lists all of the completed files (for deletion of partial files)
+PROCESSING_COMPLETE_FILE = CONFIG.get('main', 'PROCESSING_COMPLETE_FILE') # appears if all of the files have been successfully completed (no more processing for a day)
+#this script does not process anything from the current day due to added logic to keep track of hourly file dumps
 
+DSTDIR = ""
 #compiled regex for threading, these compiled bits are thread safe
 spacePorts = re.compile('( \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):([0-9][0-9]*)')
 removeHost = re.compile('(http|https)://.*:(80|443)')
 fixTime = re.compile('([0-9]{4}-[0-9]{2}-[0-9]{2})T([0-9]{2}:[0-9]{2}:[0-9]{2})\.[0-9]*Z')
-DSTDIR = ""
 
 def download(src):
 	if len(src) < 15:
@@ -93,7 +102,7 @@ def download(src):
 					new_method = urlunparse(qs)
 					methodurl_stripped = "%s %s %s" % (url_parts[0], new_method, url_parts[2])
 				finalLine = "%s %s %s %s %s %s %s \"%s\" \"%s\" %s" % (line[0], line[1], line[3], line[4], line[8], line[11], line[13], methodurl_stripped, line[15], line[16])
-				print finalLine
+				print (finalLine)
 
 def processDirectory(src):
 	fileList = list()
