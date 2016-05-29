@@ -122,6 +122,7 @@ def processDirectory(dstdir, dirlist):
 					if dstfilename.split("/")[-1] not in ToBeProcessedFiles:
 						print ("WARNING: The rogue file \"%s\" is present in the destination directory, you might want to delete this." % dstfilename)
 		for remkey in REMOVEFILE:
+			#TODO: ONLY DO THIS IF THERE ISN'T a LOCK FILE IN THE DIRECTORY
 			print ("Deleting incomplete / unwanted file \"%s\"" % remkey)
 			rogue_deletion_file_key = Key(destbucket, "%s/%s" % (dst_path,remkey))
 			destbucket.delete_key(rogue_deletion_file_key)
