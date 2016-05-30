@@ -13,13 +13,16 @@ Author: Philip Matuskiewicz - philip.matuskiewicz@nyct.com
 
 Changes:
 	5/28/16 - Initial Logic / Script
-	
+	5/30/16 - Final Logic to get data into SQS
 '''
 
 import sys
 import boto
+import boto.sqs
+from boto.sqs.message import Message
 from boto.s3.key import Key
 import configparser
+import json
 
 CONFIG = configparser.ConfigParser()
 
@@ -43,6 +46,26 @@ DST_AWS_ACCESS_KEY = CONFIG.get('main', 'DST_AWS_ACCESS_KEY')
 DST_AWS_SECRET_KEY = CONFIG.get('main', 'DST_AWS_SECRET_KEY')
 PROCESSING_STATUS_FILE = CONFIG.get('main', 'PROCESSING_STATUS_FILE') # contains all files that are finished, contains DONE if all processing is done
 PROCESSING_STATUS_FILE_COMPLETE_TXT = CONFIG.get('main', 'PROCESSING_STATUS_FILE_COMPLETE_TXT') 
+PROCESSING_LOCK_FILE = CONFIG.get('main', 'PROCESSING_LOCK_FILE')
+QUEUE_NAME = CONFIG.get('main', 'QUEUE_NAME')
+QUEUE_AWS_ACCESS_KEY = CONFIG.get('main', 'QUEUE_AWS_ACCESS_KEY')
+QUEUE_AWS_SECRET_KEY = CONFIG.get('main', 'QUEUE_AWS_SECRET_KEY')
+
+#SQS allows max string length of 256KB, in my case, the max is around 50KB which is sufficient for our needs
+def enqueue(taskname, tasks):
+	qconn = boto.sqs.connect_to_region("us-east-1", aws_access_key_id=QUEUE_AWS_ACCESS_KEY, aws_secret_access_key=QUEUE_AWS_SECRET_KEY)
+	logProcQueue = qconn.get_queue(QUEUE_NAME)
+	if logProcQueue is None:
+		print ("Creating SQS Queue: %s with Key %s" % (QUEUE_NAME,QUEUE_AWS_ACCESS_KEY))
+		logProcQueue = qconn.create_queue(QUEUE_NAME)
+	data_out = {}
+	data_out['directory'] = taskname
+	data_out['tasklist'] = tasks
+	json_tasks = json.dumps(data_out)
+	queuemessage = Message()
+	queuemessage.set_body(json_tasks)
+	print("Enqueing Task %s" % taskname)
+	logProcQueue.write(queuemessage)
 
 #destination directory of the remote server, and the files that should be there (plus the status file)
 def processDirectory(dstdir, dirlist):
@@ -58,13 +81,20 @@ def processDirectory(dstdir, dirlist):
 		if DST_PATH[DST_PATH.index('/')+1:] in dstresult.name:
 			dst_path_exists = True
 		
-
 	#prepare to either create / retrieve the status file
 	status_file_path = "%s/%s" % (dst_path,PROCESSING_STATUS_FILE)
 	status_file_key = Key(destbucket, status_file_path)
 	
+	#prepare to look for the lock file, if it exists, simply pass a warning out and move on (as if we've already covered the directory)
+	lock_file_path = "%s/%s" % (dst_path,PROCESSING_LOCK_FILE)
+	lock_file_key = Key(destbucket, lock_file_path)
+	
 	#make sure that we can get the data file from the directory if it exists
 	if dst_path_exists:
+		if lock_file_key.exists():
+			locking_machine = lock_file_key.get_contents_as_string()
+			print ("WARN: Lock file exists on %s, The instance id listed is: %s" % (lock_file_path,locking_machine))
+			return
 		if not status_file_key.exists():
 			print ("WARN: failed to retrieve file \"%s\", deleting the existing directory and starting over." % status_file_path)
 			for dk in destbucket.list(prefix=dst_path):
@@ -122,7 +152,6 @@ def processDirectory(dstdir, dirlist):
 					if dstfilename.split("/")[-1] not in ToBeProcessedFiles:
 						print ("WARNING: The rogue file \"%s\" is present in the destination directory, you might want to delete this." % dstfilename)
 		for remkey in REMOVEFILE:
-			#TODO: ONLY DO THIS IF THERE ISN'T a LOCK FILE IN THE DIRECTORY
 			print ("Deleting incomplete / unwanted file \"%s\"" % remkey)
 			rogue_deletion_file_key = Key(destbucket, "%s/%s" % (dst_path,remkey))
 			destbucket.delete_key(rogue_deletion_file_key)
@@ -135,19 +164,10 @@ def processDirectory(dstdir, dirlist):
 			ToBeProcessedFiles.append(srcfilename)
 	
 	if len(ToBeProcessedFiles) > 0:
-		#TODO pass on ToBeProcessedFiles to an external server for processing!
-		print("Root directory: %s/" % dst_path)
-		print(ToBeProcessedFiles)
-			
-			
-		
-	
-	sys.exit(0)
-	#for remoteFile in bucket.list(prefix=src, delimiter='/'):
-	#	if remoteFile.name[-3:] in "log":
-	#		remoteFilePath = remoteFile.name.strip()
-	#		fileList.append(remoteFilePath)
+		print("Creating Task Name: \"%s/\"" % dst_path)
+		enqueue(dst_path, ToBeProcessedFiles)
 
+	sys.exit(0) #TODO REMOVE THIS AFTER COMPRESSION SCRIPT IS FINISHED (AND TESTED)
 #Begin main code
 s3conn = boto.connect_s3(SRC_AWS_ACCESS_KEY, SRC_AWS_SECRET_KEY)
 bucket = s3conn.get_bucket(SRC_PATH[:SRC_PATH.index('/')])
@@ -165,4 +185,3 @@ for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'):
 				dirlist.append(fname)
 			processDirectory(dstdir, dirlist)
 s3conn.close()
-

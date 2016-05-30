@@ -19,6 +19,8 @@ import os
 import sys
 import time
 import boto
+import boto.sqs
+from boto.sqs.message import Message
 from boto.s3.key import Key
 import smart_open
 import concurrent.futures
@@ -49,6 +51,11 @@ DST_AWS_ACCESS_KEY = CONFIG.get('main', 'DST_AWS_ACCESS_KEY')
 DST_AWS_SECRET_KEY = CONFIG.get('main', 'DST_AWS_SECRET_KEY')
 REMOVE_QUERY_STRING_KEYS = CONFIG.get('main', 'REMOVE_QUERY_STRING_KEYS').split(",")
 PROCESSING_STATUS_FILE = CONFIG.get('main', 'PROCESSING_STATUS_FILE') # contains all files that are finished, contains DONE if all processing is done
+PROCESSING_STATUS_FILE_COMPLETE_TXT = CONFIG.get('main', 'PROCESSING_STATUS_FILE_COMPLETE_TXT')
+PROCESSING_LOCK_FILE = CONFIG.get('main', 'PROCESSING_LOCK_FILE')
+QUEUE_NAME = CONFIG.get('main', 'QUEUE_NAME')
+QUEUE_AWS_ACCESS_KEY = CONFIG.get('main', 'QUEUE_AWS_ACCESS_KEY')
+QUEUE_AWS_SECRET_KEY = CONFIG.get('main', 'QUEUE_AWS_SECRET_KEY')
 #this script does not process anything from the current day due to added logic to keep track of hourly file dumps
 
 DSTDIR = ""
@@ -56,6 +63,17 @@ DSTDIR = ""
 spacePorts = re.compile('( \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):([0-9][0-9]*)')
 removeHost = re.compile('(http|https)://.*:(80|443)')
 fixTime = re.compile('([0-9]{4}-[0-9]{2}-[0-9]{2})T([0-9]{2}:[0-9]{2}:[0-9]{2})\.[0-9]*Z')
+
+def readQueue():
+	qconn = boto.sqs.connect_to_region("us-east-1", aws_access_key_id=QUEUE_AWS_ACCESS_KEY, aws_secret_access_key=QUEUE_AWS_SECRET_KEY)
+	logProcQueue = qconn.get_queue(QUEUE_NAME)
+	if logProcQueue is None:
+		print ("No such Queue on SQS called %s with account %s" % (QUEUE_NAME, QUEUE_AWS_ACCESS_KEY))
+		sys.exit(0)
+	readMessage = logProcQueue.read()
+	if readMessage is not None:
+		print (readMessage.get_body())
+		logProcQueue.delete_message(readMessage)
 
 def download(src):
 	if len(src) < 15:

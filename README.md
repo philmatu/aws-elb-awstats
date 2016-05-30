@@ -32,4 +32,31 @@ awstats -update -config=example.com -LogFile="/root/logresolvemerge.pl datafiles
 A sample ElasticLoadBalancer log line looks like:
 2016-05-12T21:48:58.253468Z appelb-pr-ElasticL-3M29U6FNWKZ7 62.114.132.221:32658 10.167.134.188:80 0.000024 0.029101 0.000023 200 200 0 839 "GET http://api.example.com:80/api/data.json?key=nebwh37443&LineRef=8 HTTP/1.1" "Server/1 myLib/17 Server/1 Device/Server" - -
 
+IAM Policy:
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": "s3:ListAllMyBuckets",
+            "Resource": "arn:aws:s3:::*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": "s3:*",
+            "Resource": [
+                "arn:aws:s3:::example-bucket",
+                "arn:aws:s3:::example-bucket/*"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": "sqs:*",
+            "Resource": [
+                "arn:aws:sqs:*"
+            ]
+        }
+    ]
+}
+
 </pre>
