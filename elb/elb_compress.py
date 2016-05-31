@@ -3,8 +3,8 @@
 ***
 ELB Log Compressor script
 Takes logs from a given directory and places a cleaned gzip of them in another s3 directory (which will also be compatible with awstats)
-Works across accounts also!
-Meant for spot instances, meaning a text file of finished files will be updated as files are complete, incase terminated prematurely)
+Logs are fed in through Amazon SQS via the scheduler, this works across AWS Accounts!
+This is meant to be run on Spot Instances, meaning reduced cost to process huge amounts of data logs
 ***
 
 Author: Philip Matuskiewicz - philip.matuskiewicz@nyct.com       
@@ -12,12 +12,10 @@ Author: Philip Matuskiewicz - philip.matuskiewicz@nyct.com
 Changes:
 	5/14/16 - Initial Script
 	5/28/16 - Configuration added, Parameters to compress individually added (external coordinator)
-	
+	5/30/16 - Incorporated SQS for spot instance use, not ready to use yet
 '''
 
-import os
 import sys
-import time
 import boto
 import boto.sqs
 from boto.sqs.message import Message

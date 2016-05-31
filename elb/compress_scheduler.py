@@ -14,6 +14,7 @@ Author: Philip Matuskiewicz - philip.matuskiewicz@nyct.com
 Changes:
 	5/28/16 - Initial Logic / Script
 	5/30/16 - Final Logic to get data into SQS
+	5/31/16 - Added date-to-handle parameter option to avoid back-processing
 '''
 
 import sys
@@ -26,15 +27,26 @@ import json
 
 CONFIG = configparser.ConfigParser()
 
-if len(sys.argv) == 2:
-        inputini = sys.argv[1];
-        if inputini.endswith(".ini"):
-                CONFIG.read(inputini)
-        else:
-                print ("usage: ./compress_scheduler.py <configfile>")
-                sys.exit(0)
+DATE_TO_PROCESS = False
+if len(sys.argv) == 2 or len(sys.argv) == 3:
+	inputini = sys.argv[1];
+	if inputini.endswith(".ini"):
+		CONFIG.read(inputini)
+	else:
+		print ("usage: ./compress_scheduler.py <configfile> [<date_to_handle_in_MMDDYYYY>]")
+		sys.exit(0)
+
+	if len(sys.argv) == 3:
+		#test format and set date
+		DATE_TO_PROCESS = str(sys.argv[2]).strip()
+		if len(DATE_TO_PROCESS) is not 8:
+			print("Please enter the date to handle as MMDDYYYY (8 integers), you entered %s" % DATE_TO_PROCESS)
+			sys.exit(0)
+		if not DATE_TO_PROCESS.isdigit():
+			print("The date to handle you entered is not in MMDDYYYY (8 integers), please try again.  You entered %s" % DATE_TO_PROCESS)
+			sys.exit(0)
 else:
-        print ("usage: ./compress_scheduler.py <configfile>")
+        print ("usage: ./compress_scheduler.py <configfile> [<date_to_handle_in_MMDDYYYY>]")
         sys.exit(0)
 
 #Load configuration from ini file
@@ -167,8 +179,16 @@ def processDirectory(dstdir, dirlist):
 		print("Creating Task Name: \"%s/\"" % dst_path)
 		enqueue(dst_path, ToBeProcessedFiles)
 
-	sys.exit(0) #TODO REMOVE THIS AFTER COMPRESSION SCRIPT IS FINISHED (AND TESTED)
 #Begin main code
+
+matchdir = False
+if DATE_TO_PROCESS is not False:
+	#MMDDYYYY
+	m = DATE_TO_PROCESS[:2]
+	d = DATE_TO_PROCESS[2:4]
+	y = DATE_TO_PROCESS[4:]
+	matchdir = "%s/%s/%s" % (y,m,d)
+	
 s3conn = boto.connect_s3(SRC_AWS_ACCESS_KEY, SRC_AWS_SECRET_KEY)
 bucket = s3conn.get_bucket(SRC_PATH[:SRC_PATH.index('/')])
 for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'): 
@@ -180,6 +200,9 @@ for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'):
 			dayint = day.name[-3:-1]
 			srcdir = day.name
 			dstdir = "%s/%s/%s" % (yearint, monthint, dayint)
+			if matchdir is not False:
+				if dstdir not in matchdir:
+					continue
 			for fileWithPath in bucket.list(prefix=srcdir, delimiter='/'):
 				fname = fileWithPath.name.split('/')[-1]
 				dirlist.append(fname)
