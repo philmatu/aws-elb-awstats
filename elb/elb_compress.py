@@ -23,6 +23,7 @@ from boto.s3.key import Key
 import smart_open
 import concurrent.futures
 import json
+import zlib
 import time
 import shlex
 import re
@@ -60,6 +61,7 @@ QUEUE_AWS_SECRET_KEY = CONFIG.get('main', 'QUEUE_AWS_SECRET_KEY')
 
 DIRECTORY = ""#what comes after both SRC_PATH and DST_PATH, folder wise, received via Queue
 #compiled regex for threading, these compiled bits are thread safe
+CHUNK_SIZE = 1024 #compression block size
 spacePorts = re.compile('( \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):([0-9][0-9]*)')
 removeHost = re.compile('(http|https)://.*:(80|443)')
 fixTime = re.compile('([0-9]{4}-[0-9]{2}-[0-9]{2})T([0-9]{2}:[0-9]{2}:[0-9]{2})\.[0-9]*Z')
@@ -76,43 +78,62 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 	#dst_s3conn = boto.connect_s3(DST_AWS_ACCESS_KEY, DST_AWS_SECRET_KEY)
 	#dst_bucket = dst_s3conn.get_bucket(DST_PATH[:DST_PATH.index('/')])
 	dst_path = "%s%s%s" % (DST_PATH.split("/", 1)[1], DIRECTORY, src)
-	#with open(outfilename, "w") as outfile:
+	
+	buf = "" #buffer to hold onto chunks of data at a time
+	compressor = zlib.compressobj(1)
+	ct = 0
 	with smart_open.smart_open(srcFileKey) as srcStream:
-			for line in srcStream:
-				line = line.strip()
-				if len(line) > 20:
-					line = str(line)[2:-1] #convert byte into string
-					line = spacePorts.sub('\\1 \\2', line)
-					line = removeHost.sub('', line)
-					line = fixTime.sub('\\1 \\2', line)
-					splt = len(shlex.split(line)) #lexical parse gives me tokens enclosed by quotes for url string
-					if splt is 15:
-						line = ("%s \"\" - -\n" % line)
-					elif splt is 16:
-						line = ("%s - -\n" % line)
-					elif splt is 18:
-						line = ("%s\n" % line)
-					line = shlex.split(line)
+		for line in srcStream:
+			cleanedString = clean(line)
+			buf = "%s%s\n" % (buf, cleanedString)
+			print (len(buf))
+			while(len(buf) > CHUNK_SIZE):
+				block = bytes(buf[:CHUNK_SIZE],'utf_8')
+				#write compressed out as binary data
+				compressed = compressor.compress(block)
+				
+				#TODO write out compressed string
+				buf = buf[CHUNK_SIZE:]
+	#TODO remove once confident this works!
+	sys.exit(0)
+
+def clean(line):
+	line = line.strip()
+	if len(line) < 20:
+		return ""
+	line = str(line)[2:-1] #convert byte into string
+	line = spacePorts.sub('\\1 \\2', line)
+	line = removeHost.sub('', line)
+	line = fixTime.sub('\\1 \\2', line)
+	splt = len(shlex.split(line)) #lexical parse gives me tokens enclosed by quotes for url string
+	if splt is 15:
+		line = ("%s \"\" - -\n" % line)
+	elif splt is 16:
+		line = ("%s - -\n" % line)
+	elif splt is 18:
+		line = ("%s\n" % line)
+	line = shlex.split(line)
 #original log file format
 #%time2 %elb %host %host_port %host_r %host_r_port %request_processing_time %backend_processing_time %response_processing_time %code %backend_status_code %received_bytes %bytesd %methodurl %uaquot %other %other
 # new log file format
 # %time2 %host %host_port %backend_processing_time %backend_status_code %bytesd %methodurl %uaquot %encryption_layer
 #AWStats format
 # %time2 %host %host_port %other %code %bytesd %methodurl %uaquot %other
-				methodurl_stripped = line[14]
-				url_parts = methodurl_stripped.split(" ")
-				qs = list(urlparse(url_parts[1]))
-				if len(qs[4]) > 0:
-					qs_parts = dict(parse_qsl(qs[4]))
-					for removeKey in REMOVE_QUERY_STRING_KEYS:
-						if removeKey in qs_parts:
-							del qs_parts[removeKey]
-					qs[4] = urlencode(qs_parts)
-					new_method = urlunparse(qs)
-					methodurl_stripped = "%s %s %s" % (url_parts[0], new_method, url_parts[2])
-				finalLine = "%s %s %s %s %s %s %s \"%s\" \"%s\" %s" % (line[0], line[1], line[3], line[4], line[8], line[11], line[13], methodurl_stripped, line[15], line[16])
-				print (finalLine)
-				sys.exit(0)
+	methodurl_stripped = line[14]
+	url_parts = methodurl_stripped.split(" ")
+	qs = list(urlparse(url_parts[1]))
+	if len(qs[4]) > 0:
+		qs_parts = dict(parse_qsl(qs[4]))
+		for removeKey in REMOVE_QUERY_STRING_KEYS:
+			if removeKey in qs_parts:
+				del qs_parts[removeKey]
+		qs[4] = urlencode(qs_parts)
+		new_method = urlunparse(qs)
+		methodurl_stripped = "%s %s %s" % (url_parts[0], new_method, url_parts[2])
+	finalLine = "%s %s %s %s %s %s %s \"%s\" \"%s\" %s" % (line[0], line[1], line[3], line[4], line[8], line[11], line[13], methodurl_stripped, line[15], line[16])
+	return finalLine
+	
+
 def readQueue():
 	qconn = boto.sqs.connect_to_region("us-east-1", aws_access_key_id=QUEUE_AWS_ACCESS_KEY, aws_secret_access_key=QUEUE_AWS_SECRET_KEY)
 	logProcQueue = qconn.get_queue(QUEUE_NAME)
