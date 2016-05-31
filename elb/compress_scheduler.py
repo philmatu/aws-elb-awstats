@@ -64,19 +64,19 @@ QUEUE_AWS_ACCESS_KEY = CONFIG.get('main', 'QUEUE_AWS_ACCESS_KEY')
 QUEUE_AWS_SECRET_KEY = CONFIG.get('main', 'QUEUE_AWS_SECRET_KEY')
 
 #SQS allows max string length of 256KB, in my case, the max is around 50KB which is sufficient for our needs
-def enqueue(taskname, tasks):
+def enqueue(directory, tasks):
 	qconn = boto.sqs.connect_to_region("us-east-1", aws_access_key_id=QUEUE_AWS_ACCESS_KEY, aws_secret_access_key=QUEUE_AWS_SECRET_KEY)
 	logProcQueue = qconn.get_queue(QUEUE_NAME)
 	if logProcQueue is None:
 		print ("Creating SQS Queue: %s with Key %s" % (QUEUE_NAME,QUEUE_AWS_ACCESS_KEY))
 		logProcQueue = qconn.create_queue(QUEUE_NAME)
 	data_out = {}
-	data_out['directory'] = taskname
+	data_out['directory'] = "%s/" % dstdir
 	data_out['tasklist'] = tasks
 	json_tasks = json.dumps(data_out)
 	queuemessage = Message()
 	queuemessage.set_body(json_tasks)
-	print("Enqueing Task %s" % taskname)
+	print("Enqueing Task %s" % dstdir)
 	logProcQueue.write(queuemessage)
 
 #destination directory of the remote server, and the files that should be there (plus the status file)
@@ -176,8 +176,7 @@ def processDirectory(dstdir, dirlist):
 			ToBeProcessedFiles.append(srcfilename)
 	
 	if len(ToBeProcessedFiles) > 0:
-		print("Creating Task Name: \"%s/\"" % dst_path)
-		enqueue(dst_path, ToBeProcessedFiles)
+		enqueue(dstdir, ToBeProcessedFiles)
 
 #Begin main code
 
