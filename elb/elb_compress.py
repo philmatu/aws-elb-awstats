@@ -14,6 +14,7 @@ Changes:
 	5/28/16 - Configuration added, Parameters to compress individually added (external coordinator)
 	5/30/16 - Incorporated SQS for spot instance use, not ready to use yet
 	5/31/16 - Added compression support / upload to s3 support / lock/status file updates (for parts)
+	6/1/16 - Finalized Script
 '''
 
 import sys
@@ -64,12 +65,14 @@ QUEUE_AWS_ACCESS_KEY = CONFIG.get('main', 'QUEUE_AWS_ACCESS_KEY')
 QUEUE_AWS_SECRET_KEY = CONFIG.get('main', 'QUEUE_AWS_SECRET_KEY')
 #this script does not process anything from the current day due to added logic to keep track of hourly file dumps
 
-DIRECTORY = ""#what comes after both SRC_PATH and DST_PATH, folder wise, received via Queue
 #compiled regex for threading, these compiled bits are thread safe
-CHUNK_SIZE = 8192 #compression block size
 spacePorts = re.compile('( \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):([0-9][0-9]*)')
 removeHost = re.compile('(http|https)://.*:(80|443)')
 fixTime = re.compile('([0-9]{4}-[0-9]{2}-[0-9]{2})T([0-9]{2}:[0-9]{2}:[0-9]{2})\.[0-9]*Z')
+
+#global constant variables
+DIRECTORY = ""#what comes after both SRC_PATH and DST_PATH, folder wise, received via Queue
+CHUNK_SIZE = 8192 #compression block size
 awsmetaurl = "http://169.254.169.254/latest/meta-data/instance-id"
 
 def createLock(filePath):
@@ -108,7 +111,8 @@ def releaseLock(filePath):
 		print("The lock file has been removed, releasing for future processing")
 	dst_s3conn.close()
 	return False
-	
+
+#the completedFile doesn't have a .gz, even though we know all files here should end in GZ, this is handled by the scheduler
 def updateStatusFile(completedFile, completionListVerify=list()):
 	dst_s3conn = boto.connect_s3(DST_AWS_ACCESS_KEY, DST_AWS_SECRET_KEY)
 	dst_bucket = dst_s3conn.get_bucket(DST_PATH[:DST_PATH.index('/')])
@@ -116,19 +120,27 @@ def updateStatusFile(completedFile, completionListVerify=list()):
 	status_file_key = Key(dst_bucket, status_file_path)
 	
 	theCompletedFile = completedFile.rsplit('/', 1)[1]
-
-	if len(completionListVerify) > 0:
-		#TODO
-		#completion clause invoked, verify contents against the actual file
-		#then write on the first line the compleiton text PROCESSING_STATUS_FILE_COMPLETE_TXT
-
+	
 	if not status_file_key.exists():
+		if len(completionListVerify) > 0:
+			print("Seeking Verification for %s, but this directory has no status file... rerun scheduler to delete / restart processing please.  I'll end now on this directory" % completedFile)
+			return
 		print ("WARN: failed to retrieve file \"%s\", starting new key." % status_file_path)
 		status_file_key.set_contents_from_string(theCompletedFile)
 	else:
-		status_file_text = str(status_file_key.get_contents_as_string())
-		new_status_file_text = "%s%s\n" % (status_file_text[2:-1], theCompletedFile)
-		status_file_key.set_contents_from_string(new_status_file_text)
+		status_file_text = str(status_file_key.get_contents_as_string())[2:-1]
+		if len(completionListVerify) > 0:
+			for line in status_file_text:
+				if line not in completionListVerify:
+					print("The line %s was not found in the list of tasks, this means I didn't complete successfully... I will leave the file alone in directory %s" % (line,completedFile))
+					#TODO queue this directory for scheduler to reprocess
+					return
+			print ("All files that were queued by scheduler are finished and in status file, appending completion text now for the next pipeline step, directory is %s" % completedFile)
+			new_status_file_text = "%s\n%s" % (PROCESSING_STATUS_FILE_COMPLETE_TXT,status_file_text)
+			status_file_key.set_contents_from_string(new_status_file_text)
+		else:
+			new_status_file_text = "%s%s\n" % (status_file_text, theCompletedFile)
+			status_file_key.set_contents_from_string(new_status_file_text)
 	print("Updated Status file with latest data, file %s" % theCompletedFile)
 
 def compress(src): #takes in a filename that is in the SRCPATH directory and places a compressed/gzipped version into DSTPATH
@@ -141,7 +153,8 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 
 	dst_s3conn = boto.connect_s3(DST_AWS_ACCESS_KEY, DST_AWS_SECRET_KEY)
 	dst_bucket = dst_s3conn.get_bucket(DST_PATH[:DST_PATH.index('/')])
-	dst_path = "%s%s%s.gz" % (DST_PATH.split("/", 1)[1], DIRECTORY, src)
+	dst_path_sans_GZ = "%s%s%s" % (DST_PATH.split("/", 1)[1], DIRECTORY, src)
+	dst_path = "%s.gz" % dst_path_sans_GZ
 	mpu = dst_bucket.initiate_multipart_upload(dst_path)
 
 	buf = "" #buffer to hold onto chunks of data at a time
@@ -174,7 +187,7 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 		mpu.upload_part_from_file(outStream, part)
 		mpu.complete_upload()
 	with WRITE_LOCK:
-		updateStatusFile(dst_path)
+		updateStatusFile(dst_path_sans_GZ)
 
 def clean(line):
 	line = line.strip()
