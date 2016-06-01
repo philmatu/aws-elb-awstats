@@ -109,13 +109,18 @@ def releaseLock(filePath):
 	dst_s3conn.close()
 	return False
 	
-def updateStatusFile(completedFile):
+def updateStatusFile(completedFile, completionListVerify=list()):
 	dst_s3conn = boto.connect_s3(DST_AWS_ACCESS_KEY, DST_AWS_SECRET_KEY)
 	dst_bucket = dst_s3conn.get_bucket(DST_PATH[:DST_PATH.index('/')])
 	status_file_path = "%s/%s" % (completedFile.rsplit('/', 1)[0],PROCESSING_STATUS_FILE)
 	status_file_key = Key(dst_bucket, status_file_path)
 	
 	theCompletedFile = completedFile.rsplit('/', 1)[1]
+
+	if len(completionListVerify) > 0:
+		#TODO
+		#completion clause invoked, verify contents against the actual file
+		#then write on the first line the compleiton text PROCESSING_STATUS_FILE_COMPLETE_TXT
 
 	if not status_file_key.exists():
 		print ("WARN: failed to retrieve file \"%s\", starting new key." % status_file_path)
@@ -250,10 +255,11 @@ while True:
 		#TODO remove max workers
 		#with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
 		#	executor.map(compress, tasks)
+		with WRITE_LOCK:
+			updateStatusFile(DIRECTORY, Tasks) #completion is here if all checks out... we assume that the scheduler's queue has all the tasks for a day in this list
 		releaseLock(DIRECTORY)
 	else:
 		print("Exiting without doing work, couldn't acquire a lock for processing the date associated with %s." % tasks[0]);
-	#TODO: status file should be updated entirely!
 	print("Done")
 	sys.exit(0)
 
