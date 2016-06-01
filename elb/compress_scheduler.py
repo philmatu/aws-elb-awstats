@@ -170,7 +170,7 @@ def processDirectory(dstdir, dirlist):
 	
 	else:
 		print ("The directory %s does not exist, creating task to process this directory" % dst_path)
-		res = status_file_key.set_contents_from_string('')
+		status_file_key.set_contents_from_string("")
 		ToBeProcessedFiles = list()
 		for srcfilename in dirlist:
 			ToBeProcessedFiles.append(srcfilename)
