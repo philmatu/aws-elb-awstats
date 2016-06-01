@@ -15,6 +15,7 @@ Changes:
 	5/28/16 - Initial Logic / Script
 	5/30/16 - Final Logic to get data into SQS
 	5/31/16 - Added date-to-handle parameter option to avoid back-processing
+	6/1/16 - Status file in gz format accounted for, still needs to account for reprocess queue
 '''
 
 import sys
@@ -137,7 +138,7 @@ def processDirectory(dstdir, dirlist):
 				completedFiles.append(line)
 				#find any file in the meta data that isn't present in the source directory, warn on these
 				#as it may be a corrupted meta data file
-				if line not in dirlist: #file not in source
+				if line not in dirlist: #file not in source, keep in mind "not in" will allow for gz handling without issue
 					#NOTE: perhaps in the future, we can remove the rogue lines from this file
 					print ("WARNING: the file \"%s\" wasn't found in the source directory, is the meta data corrupted?" % line)
 
