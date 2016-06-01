@@ -58,7 +58,7 @@ DST_AWS_ACCESS_KEY = CONFIG.get('main', 'DST_AWS_ACCESS_KEY')
 DST_AWS_SECRET_KEY = CONFIG.get('main', 'DST_AWS_SECRET_KEY')
 REMOVE_QUERY_STRING_KEYS = CONFIG.get('main', 'REMOVE_QUERY_STRING_KEYS').split(",")
 PROCESSING_STATUS_FILE = CONFIG.get('main', 'PROCESSING_STATUS_FILE') # contains all files that are finished, contains DONE if all processing is done
-PROCESSING_STATUS_FILE_COMPLETE_TXT = CONFIG.get('main', 'PROCESSING_STATUS_FILE_COMPLETE_TXT')
+PROCESSING_STATUS_FILE_COMPLETE_TXT = CONFIG.get('main', 'PROCESSING_STATUS_FILE_COMPLETE_TXT').strip()
 PROCESSING_LOCK_FILE = CONFIG.get('main', 'PROCESSING_LOCK_FILE')
 QUEUE_NAME = CONFIG.get('main', 'QUEUE_NAME')
 QUEUE_AWS_ACCESS_KEY = CONFIG.get('main', 'QUEUE_AWS_ACCESS_KEY')
@@ -112,13 +112,26 @@ def releaseLock(filePath):
 	dst_s3conn.close()
 	return False
 
+def isAlreadyInStatusFile(completedFile):
+	dst_s3conn = boto.connect_s3(DST_AWS_ACCESS_KEY, DST_AWS_SECRET_KEY)
+	dst_bucket = dst_s3conn.get_bucket(DST_PATH[:DST_PATH.index('/')])
+	status_file_path = "%s/%s" % (completedFile.rsplit('/', 1)[0],PROCESSING_STATUS_FILE)
+	status_file_key = Key(dst_bucket, status_file_path)
+	theCompletedFile = completedFile.rsplit('/', 1)[1]
+	if not status_file_key.exists():
+		return True
+	else:
+		status_file_text = str(status_file_key.get_contents_as_string())[2:-1]
+		if theCompletedFile in status_file_text:
+			return True
+	return False
+
 #the completedFile doesn't have a .gz, even though we know all files here should end in GZ, this is handled by the scheduler
 def updateStatusFile(completedFile, completionListVerify=list()):
 	dst_s3conn = boto.connect_s3(DST_AWS_ACCESS_KEY, DST_AWS_SECRET_KEY)
 	dst_bucket = dst_s3conn.get_bucket(DST_PATH[:DST_PATH.index('/')])
 	status_file_path = "%s/%s" % (completedFile.rsplit('/', 1)[0],PROCESSING_STATUS_FILE)
 	status_file_key = Key(dst_bucket, status_file_path)
-	
 	theCompletedFile = completedFile.rsplit('/', 1)[1]
 	
 	if not status_file_key.exists():
@@ -130,9 +143,10 @@ def updateStatusFile(completedFile, completionListVerify=list()):
 	else:
 		status_file_text = str(status_file_key.get_contents_as_string())[2:-1]
 		if len(completionListVerify) > 0:
-			for line in status_file_text:
+			for line in status_file_text.split('\n'):
+				#TODO figure out why \\n is in the text file as read... 
 				if line not in completionListVerify:
-					print("The line %s was not found in the list of tasks, this means I didn't complete successfully... I will leave the file alone in directory %s" % (line,completedFile))
+					print("The line \"%s\" was not found in the list of tasks, this means I didn't complete successfully... I will leave the file alone in directory %s" % (line,completedFile))
 					#TODO queue this directory for scheduler to reprocess
 					return
 			print ("All files that were queued by scheduler are finished and in status file, appending completion text now for the next pipeline step, directory is %s" % completedFile)
@@ -156,6 +170,10 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 	dst_path_sans_GZ = "%s%s%s" % (DST_PATH.split("/", 1)[1], DIRECTORY, src)
 	dst_path = "%s.gz" % dst_path_sans_GZ
 	mpu = dst_bucket.initiate_multipart_upload(dst_path)
+
+	if isAlreadyInStatusFile(dst_path_sans_GZ):
+		print("The file %s is already in the status file, meaning it should be done... skipping" % dst_path_sans_GZ)
+		return
 
 	buf = "" #buffer to hold onto chunks of data at a time
 	part = 1
@@ -269,7 +287,8 @@ while True:
 		#with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
 		#	executor.map(compress, tasks)
 		with WRITE_LOCK:
-			updateStatusFile(DIRECTORY, Tasks) #completion is here if all checks out... we assume that the scheduler's queue has all the tasks for a day in this list
+			src_path = "%s%s" % (DST_PATH.split("/", 1)[1], DIRECTORY)
+			updateStatusFile(src_path, tasks) #completion is here if all checks out... we assume that the scheduler's queue has all the tasks for a day in this list
 		releaseLock(DIRECTORY)
 	else:
 		print("Exiting without doing work, couldn't acquire a lock for processing the date associated with %s." % tasks[0]);
