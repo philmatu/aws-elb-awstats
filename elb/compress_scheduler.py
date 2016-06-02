@@ -66,7 +66,7 @@ QUEUE_AWS_ACCESS_KEY = CONFIG.get('main', 'QUEUE_AWS_ACCESS_KEY')
 QUEUE_AWS_SECRET_KEY = CONFIG.get('main', 'QUEUE_AWS_SECRET_KEY')
 
 #SQS allows max string length of 256KB, in my case, the max is around 50KB which is sufficient for our needs
-def enqueue(directory, tasks):
+def enqueue(dstdir, tasks):
 	qconn = boto.sqs.connect_to_region("us-east-1", aws_access_key_id=QUEUE_AWS_ACCESS_KEY, aws_secret_access_key=QUEUE_AWS_SECRET_KEY)
 	logProcQueue = qconn.get_queue(QUEUE_NAME)
 	if logProcQueue is None:
@@ -78,7 +78,7 @@ def enqueue(directory, tasks):
 	json_tasks = json.dumps(data_out)
 	queuemessage = Message()
 	queuemessage.set_body(json_tasks)
-	print("Enqueing Task %s" % dstdir)
+	print("Enqueing Task %s" % data_out['directory'])
 	logProcQueue.write(queuemessage)
 
 #destination directory of the remote server, and the files that should be there (plus the status file)
@@ -106,7 +106,7 @@ def processDirectory(dstdir, dirlist):
 	#make sure that we can get the data file from the directory if it exists
 	if dst_path_exists:
 		if lock_file_key.exists():
-			locking_machine = lock_file_key.get_contents_as_string()
+			locking_machine = bytes(lock_file_key.get_contents_as_string()).decode(encoding='UTF-8')
 			print ("WARN: Lock file exists on %s, The instance id listed is: %s" % (lock_file_path,locking_machine))
 			return
 		if not status_file_key.exists():
@@ -123,14 +123,13 @@ def processDirectory(dstdir, dirlist):
 	
 	if dst_path_exists:
 		print ("The directory %s exists, checking that all files are complete" % dst_path)
-		status_file_text = status_file_key.get_contents_as_string()
+		status_file_text = bytes(status_file_key.get_contents_as_string()).decode(encoding='UTF-8')
 		
 		firstLine = True
 		#create a list of all the files in the meta data file that it claims are completed
 		completedFiles = list()
 		if len(status_file_text) > 0:
-			status_file_as_string = str(status_file_text)[2:-1]
-			for line in status_file_as_string.split("\n"):
+			for line in status_file_text.split("\n"):
 				if firstLine:
 					firstLine = False
 					if PROCESSING_STATUS_FILE_COMPLETE_TXT in line:
@@ -153,21 +152,24 @@ def processDirectory(dstdir, dirlist):
 			#find any file in the destination directory that isn't on the completed list and is not slated for processing
 			#these files are incomplete, and need to be reprocessed / deleted (and are present in the source directory)
 			for df in filesInDstDirectory:
-				if srcfilename in df:
+				if df in srcfilename:
 					print ("Warn, <srcdir> file \"%s\" exists, but not marked completed, NOW deleting and add for reprocessing" % srcfilename)
-					REMOVEFILE.append(srcfilename)
+					REMOVEFILE.append(df)
 					ToBeProcessedFiles.append(srcfilename)
 					
 		#finally, find rogue files and warn about them (files in the dest directory, but on on meta data or source directory)
 		for dstfilename in filesInDstDirectory:
 			if PROCESSING_STATUS_FILE not in dstfilename:#except for the status file, which would be present
-				if dstfilename.split("/")[-1] not in completedFiles:
+				dstcheckstring = dstfilename.split("/")[-1]
+				if dstcheckstring.endswith(".gz"):
+					dstcheckstring = dstcheckstring[:-3]
+				if dstcheckstring not in completedFiles:
 				#the file isn't in the meta data or slated for completetion (from source directory)
-					if dstfilename.split("/")[-1] not in ToBeProcessedFiles:
+					if dstcheckstring not in ToBeProcessedFiles:
 						print ("WARNING: The rogue file \"%s\" is present in the destination directory, you might want to delete this." % dstfilename)
 		for remkey in REMOVEFILE:
 			print ("Deleting incomplete / unwanted file \"%s\"" % remkey)
-			rogue_deletion_file_key = Key(destbucket, "%s/%s" % (dst_path,remkey))
+			rogue_deletion_file_key = Key(destbucket, remkey)
 			destbucket.delete_key(rogue_deletion_file_key)
 	
 	else:
