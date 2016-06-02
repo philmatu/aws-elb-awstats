@@ -182,6 +182,23 @@ def processDirectory(dstdir, dirlist):
 	if len(ToBeProcessedFiles) > 0:
 		enqueue(dstdir, ToBeProcessedFiles)
 
+def readIncompleteQueue():
+	qconn = boto.sqs.connect_to_region("us-east-1", aws_access_key_id=QUEUE_AWS_ACCESS_KEY, aws_secret_access_key=QUEUE_AWS_SECRET_KEY)
+	logProcQueue = qconn.get_queue(INCOMPLETE_TASKS_QUEUE_NAME)
+	if logProcQueue is None:
+		print("Checked the incomplete queue %s, nothing was there, so we'll continue with scheduling as normal")
+		return list()
+	messages = logProcQueue.get_messages(wait_time_seconds=1)
+	out = list()
+	for message in messages:
+		raw_json = message.get_body()
+		data = json.loads(raw_json)
+		if len(data['directory']) > 0:
+			out.append(data['directory'][:-1])#remove final / which is in directory
+		#TODO remove comment once this works
+		#logProcQueue.delete_message(message)
+	return out
+
 #Begin main code
 
 matchdir = False
@@ -191,7 +208,8 @@ if DATE_TO_PROCESS is not False:
 	d = DATE_TO_PROCESS[2:4]
 	y = DATE_TO_PROCESS[4:]
 	matchdir = "%s/%s/%s" % (y,m,d)
-	
+
+incompleteList = readIncompleteQueue()	
 s3conn = boto.connect_s3(SRC_AWS_ACCESS_KEY, SRC_AWS_SECRET_KEY)
 bucket = s3conn.get_bucket(SRC_PATH[:SRC_PATH.index('/')])
 for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'): 
@@ -203,6 +221,8 @@ for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'):
 			dayint = day.name[-3:-1]
 			srcdir = day.name
 			dstdir = "%s/%s/%s" % (yearint, monthint, dayint)
+			#if len(incompleteList) > 0:
+			#TODO the processor should never go forward past this date or something, logic not fully figured out
 			if matchdir is not False:
 				if dstdir not in matchdir:
 					continue

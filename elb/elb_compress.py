@@ -303,8 +303,9 @@ while True:
 	DIRECTORY = data['directory'] #appended to src and dst path from configuration file
 	tasks = data['tasklist']
 	if createLock(DIRECTORY):
-		compress(tasks[1]) #TODO testing function call
-		compress(tasks[2]) #TODO testing function call
+		
+		#compress(tasks[1]) #TODO testing function call
+		#compress(tasks[2]) #TODO testing function call
 		#TODO remove max workers
 		#with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
 		#	executor.map(compress, tasks)
