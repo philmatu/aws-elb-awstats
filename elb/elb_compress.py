@@ -61,6 +61,7 @@ PROCESSING_STATUS_FILE = CONFIG.get('main', 'PROCESSING_STATUS_FILE') # contains
 PROCESSING_STATUS_FILE_COMPLETE_TXT = CONFIG.get('main', 'PROCESSING_STATUS_FILE_COMPLETE_TXT').strip()
 PROCESSING_LOCK_FILE = CONFIG.get('main', 'PROCESSING_LOCK_FILE')
 QUEUE_NAME = CONFIG.get('main', 'QUEUE_NAME')
+INCOMPLETE_TASKS_QUEUE_NAME = CONFIG.get('main', 'INCOMPLETE_TASKS_QUEUE_NAME')
 QUEUE_AWS_ACCESS_KEY = CONFIG.get('main', 'QUEUE_AWS_ACCESS_KEY')
 QUEUE_AWS_SECRET_KEY = CONFIG.get('main', 'QUEUE_AWS_SECRET_KEY')
 #this script does not process anything from the current day due to added logic to keep track of hourly file dumps
@@ -143,10 +144,15 @@ def updateStatusFile(completedFile, completionListVerify=list()):
 	else:
 		status_file_text = bytes(status_file_key.get_contents_as_string()).decode(encoding='UTF-8')
 		if len(completionListVerify) > 0:
+			for line in completionListVerify:
+				if line not in status_file_text.split("\n"):
+					print("The task \"%s\" isn't in the status file, this means I didn't complete successfully... I will notify the scheduler queue of my directory: %s" % (line,completedFile))
+					enQueueNonCompletedDirectory(DIRECTORY)#string in YYYY/MM/DD from the original queue
+					return
 			for line in status_file_text.split("\n"):
 				if line not in completionListVerify:
-					print("The line \"%s\" was not found in the list of tasks, this means I didn't complete successfully... I will leave the file alone in directory %s" % (line,completedFile))
-					#TODO queue this directory for scheduler to reprocess
+					print("The line \"%s\" was not found in the list of tasks, this means I didn't complete successfully... I will notify the scheduler queue of my directory: %s" % (line,completedFile))
+					enQueueNonCompletedDirectory(DIRECTORY)#string in YYYY/MM/DD from the original queue
 					return
 			print ("All files that were queued by scheduler are finished and in status file, appending completion text now for the next pipeline step, directory is %s" % completedFile)
 			new_status_file_text = "%s\n%s" % (PROCESSING_STATUS_FILE_COMPLETE_TXT,status_file_text)
@@ -263,10 +269,23 @@ def readQueue():
 		sys.exit(0)
 	readMessage = logProcQueue.read(visibility_timeout=10) #give me 10 seconds to remove the queue item
 	if readMessage is not None:
+		logProcQueue.delete_message(readMessage)
 		return readMessage.get_body()
-		#TODO once ready, uncomment for full script functionality
-		#logProcQueue.delete_message(readMessage)
 	return None
+
+def enQueueNonCompletedDirectory(directory):
+	qconn = boto.sqs.connect_to_region("us-east-1", aws_access_key_id=QUEUE_AWS_ACCESS_KEY, aws_secret_access_key=QUEUE_AWS_SECRET_KEY)
+	logProcQueue = qconn.get_queue(INCOMPLETE_TASKS_QUEUE_NAME)
+	if logProcQueue is None:
+		print ("Creating SQS Queue: %s with Key %s" % (INCOMPLETE_TASKS_QUEUE_NAME,QUEUE_AWS_ACCESS_KEY))
+		logProcQueue = qconn.create_queue(INCOMPLETE_TASKS_QUEUE_NAME)
+	data_out = {}
+	data_out['directory'] = directory #in format of yyyy/mm/dd
+	json_encoded_message = json.dumps(data_out)
+	queuemessage = Message()
+	queuemessage.set_body(json_encoded_message)
+	print("Enqueing Directory (YYYY/MM/DD) %s for re-scheduling and re-processing due to incomplete processing with me" % data_out['directory'])
+	logProcQueue.write(queuemessage)
 
 while True:
 	count = 0
@@ -284,8 +303,6 @@ while True:
 	DIRECTORY = data['directory'] #appended to src and dst path from configuration file
 	tasks = data['tasklist']
 	if createLock(DIRECTORY):
-		
-		compress(tasks[0]) #TODO testing function call
 		compress(tasks[1]) #TODO testing function call
 		compress(tasks[2]) #TODO testing function call
 		#TODO remove max workers
