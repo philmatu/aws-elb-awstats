@@ -14,7 +14,7 @@ Changes:
 	5/28/16 - Configuration added, Parameters to compress individually added (external coordinator)
 	5/30/16 - Incorporated SQS for spot instance use, not ready to use yet
 	5/31/16 - Added compression support / upload to s3 support / lock/status file updates (for parts)
-	6/1/16 - Finalized Script
+	6/2/16 - Finalized Script
 '''
 
 import sys
@@ -88,7 +88,7 @@ def createLock(filePath):
 		dst_s3conn.close()
 		return True
 	else:
-		instanceid = str(lock_file_key.get_contents_as_string())
+		instanceid = bytes(lock_file_key.get_contents_as_string()).decode(encoding='UTF-8')
 		print("The lock file exists, the instance running is %s" % instanceid[2:-1])
 	dst_s3conn.close()
 	return False
@@ -102,7 +102,7 @@ def releaseLock(filePath):
 		print("OH CRAP... There was no lock... hoping nothing went wrong!  You may want to verify this.")
 		return False
 	else:
-		instanceid = str(lock_file_key.get_contents_as_string())
+		instanceid = bytes(lock_file_key.get_contents_as_string()).decode(encoding='UTF-8')
 		resource = urllib.request.urlopen(awsmetaurl)
 		myinstanceid = resource.read().decode('utf-8')
 		if myinstanceid not in instanceid:
@@ -121,7 +121,7 @@ def isAlreadyInStatusFile(completedFile):
 	if not status_file_key.exists():
 		return True
 	else:
-		status_file_text = str(status_file_key.get_contents_as_string())[2:-1]
+		status_file_text = bytes(status_file_key.get_contents_as_string()).decode(encoding='UTF-8')
 		if theCompletedFile in status_file_text:
 			return True
 	return False
@@ -132,7 +132,7 @@ def updateStatusFile(completedFile, completionListVerify=list()):
 	dst_bucket = dst_s3conn.get_bucket(DST_PATH[:DST_PATH.index('/')])
 	status_file_path = "%s/%s" % (completedFile.rsplit('/', 1)[0],PROCESSING_STATUS_FILE)
 	status_file_key = Key(dst_bucket, status_file_path)
-	theCompletedFile = completedFile.rsplit('/', 1)[1]
+	theCompletedFile = completedFile.rsplit('/', 1)[1].strip()
 	
 	if not status_file_key.exists():
 		if len(completionListVerify) > 0:
@@ -141,10 +141,9 @@ def updateStatusFile(completedFile, completionListVerify=list()):
 		print ("WARN: failed to retrieve file \"%s\", starting new key." % status_file_path)
 		status_file_key.set_contents_from_string(theCompletedFile)
 	else:
-		status_file_text = str(status_file_key.get_contents_as_string())[2:-1]
+		status_file_text = bytes(status_file_key.get_contents_as_string()).decode(encoding='UTF-8')
 		if len(completionListVerify) > 0:
-			for line in status_file_text.split('\n'):
-				#TODO figure out why \\n is in the text file as read... 
+			for line in status_file_text.split("\n"):
 				if line not in completionListVerify:
 					print("The line \"%s\" was not found in the list of tasks, this means I didn't complete successfully... I will leave the file alone in directory %s" % (line,completedFile))
 					#TODO queue this directory for scheduler to reprocess
@@ -153,7 +152,10 @@ def updateStatusFile(completedFile, completionListVerify=list()):
 			new_status_file_text = "%s\n%s" % (PROCESSING_STATUS_FILE_COMPLETE_TXT,status_file_text)
 			status_file_key.set_contents_from_string(new_status_file_text)
 		else:
-			new_status_file_text = "%s%s\n" % (status_file_text, theCompletedFile)
+			if len(status_file_text) < 3:
+				new_status_file_text = theCompletedFile
+			else:
+				new_status_file_text = "%s\n%s" % (status_file_text, theCompletedFile)
 			status_file_key.set_contents_from_string(new_status_file_text)
 	print("Updated Status file with latest data, file %s" % theCompletedFile)
 
@@ -282,7 +284,10 @@ while True:
 	DIRECTORY = data['directory'] #appended to src and dst path from configuration file
 	tasks = data['tasklist']
 	if createLock(DIRECTORY):
+		
 		compress(tasks[0]) #TODO testing function call
+		compress(tasks[1]) #TODO testing function call
+		compress(tasks[2]) #TODO testing function call
 		#TODO remove max workers
 		#with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
 		#	executor.map(compress, tasks)
