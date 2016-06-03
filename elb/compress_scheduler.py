@@ -187,7 +187,7 @@ def processDirectory(dstdir, dirlist):
 		ENQUEUED_TASKS.append(dstdir)
 	dests3conn.close()
 
-def readIncompleteQueue():
+def readIncompleteQueue(deleteAfterRead=True):
 	qconn = boto.sqs.connect_to_region("us-east-1", aws_access_key_id=QUEUE_AWS_ACCESS_KEY, aws_secret_access_key=QUEUE_AWS_SECRET_KEY)
 	logProcQueue = qconn.get_queue(INCOMPLETE_TASKS_QUEUE_NAME)
 	if logProcQueue is None:
@@ -201,7 +201,8 @@ def readIncompleteQueue():
 			data = json.loads(raw_json)
 			if len(data['directory']) > 0:
 				out.add(data['directory'][:-1])#remove final / which is in directory
-			logProcQueue.delete_message(message)
+			if deleteAfterRead:
+				logProcQueue.delete_message(message)
 		messages = logProcQueue.get_messages(wait_time_seconds=2, num_messages=10)#continue reading
 	qconn.close()
 	return out
@@ -216,7 +217,13 @@ if DATE_TO_PROCESS is not False:
 	y = DATE_TO_PROCESS[4:]
 	matchdir = "%s/%s/%s" % (y,m,d)
 
-INCOMPLETE_LIST = readIncompleteQueue()
+INCOMPLETE_LIST = list()
+if matchdir is False:
+	INCOMPLETE_LIST = readIncompleteQueue()
+else:
+	#if we're running a match directory operation, we shouldn't look at incomplete items
+	INCOMPLETE_LIST = readIncompleteQueue(deleteAfterRead=False)
+	
 s3conn = boto.connect_s3(SRC_AWS_ACCESS_KEY, SRC_AWS_SECRET_KEY)
 bucket = s3conn.get_bucket(SRC_PATH[:SRC_PATH.index('/')])
 for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'): 
@@ -237,7 +244,8 @@ for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'):
 			processDirectory(dstdir, dirlist)
 for task in INCOMPLETE_LIST:
 	if task not in ENQUEUED_TASKS:
-		print("WARNING: The task \"%s\" wasn't queued for reprocessing, yet it failed on a worker... Please manually verify!" % task)
+		if matchdir is False:
+			print("WARNING: The task \"%s\" wasn't queued for reprocessing, yet it failed on a worker... Please manually verify!" % task)
 	else:
 		print("info: The task \"%s\" was queued for reprocessing... it previously failed on a worker node." % task)
 s3conn.close()
