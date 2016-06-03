@@ -32,6 +32,7 @@ import json
 import time
 import shlex
 import re
+import socket
 from urllib.parse import urlencode, urlparse, parse_qsl, urlunparse
 import urllib.request
 import configparser
@@ -39,17 +40,26 @@ import gzip
 
 WRITE_LOCK = threading.Lock()
 CONFIG = configparser.ConfigParser()
-
-if len(sys.argv) == 2:
-        inputini = sys.argv[1];
-        if inputini.endswith(".ini"):
-                CONFIG.read(inputini)
-        else:
-                print ("usage: ./elb_compress.py <configfile>")
-                sys.exit(0)
+DATE_TO_PROCESS = False
+if len(sys.argv) == 2 or len(sys.argv) == 3:
+	inputini = sys.argv[1];
+	if inputini.endswith(".ini"):
+		CONFIG.read(inputini)
+	else:
+		print ("usage: ./elb_compress.py <configfile> [<date_to_handle_in_MMDDYYYY>]")
+		sys.exit(0)
+	if len(sys.argv) == 3:
+		#test format and set date
+		DATE_TO_PROCESS = str(sys.argv[2]).strip()
+		if len(DATE_TO_PROCESS) is not 8:
+			print("Please enter the date to handle as MMDDYYYY (8 integers), you entered %s" % DATE_TO_PROCESS)
+			sys.exit(0)
+		if not DATE_TO_PROCESS.isdigit():
+			print("The date to handle you entered is not in MMDDYYYY (8 integers), please try again.  You entered %s" % DATE_TO_PROCESS)
+			sys.exit(0)
 else:
-        print ("usage: ./elb_compress.py <configfile>")
-        sys.exit(0)
+	print ("usage: ./elb_compress.py <configfile> [<date_to_handle_in_MMDDYYYY>]")
+	sys.exit(0)
 
 #Load configuration from ini file
 SRC_PATH = CONFIG.get('main', 'SRC_PATH')
@@ -82,9 +92,11 @@ def handle_SIGINT_THREADS(signum, frame):
 	print("Thread canceling")
 
 def handle_SIGINT_MAIN(signum, frame):
-	print("Caught the kill signal from ctrl c, Publishing directory \"%s\" to incomplete queue" % DIRECTORY)
-	enQueueNonCompletedDirectory(DIRECTORY)
-	releaseLock(DIRECTORY)
+	if len(DIRECTORY) > 0:
+		print("Caught the kill signal from ctrl c, Publishing directory \"%s\" to incomplete queue" % DIRECTORY)
+		enQueueNonCompletedDirectory(DIRECTORY)
+		releaseLock(DIRECTORY)
+	print("Exiting gracefully... Goodbye.")
 	sys.exit(0)
 
 def createLock(filePath):
@@ -101,7 +113,7 @@ def createLock(filePath):
 		return True
 	else:
 		instanceid = bytes(lock_file_key.get_contents_as_string()).decode(encoding='UTF-8')
-		print("The lock file exists, the instance running is %s" % instanceid[2:-1])
+		print("The lock file exists, the instance running is %s" % instanceid)
 	dst_s3conn.close()
 	return False
 
@@ -227,19 +239,48 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 	with WRITE_LOCK:
 		updateStatusFile(dst_path_sans_GZ)
 
+def isIPV6(addr):
+	try:
+		socket.inet_pton(socket.AF_INET6, addr)
+		return True
+	except socket.error:
+		return False
+
+def splitIPV6Ports(line):
+	#after ipv4 split... try for ipv6
+	#split ipv6 addresses, this could show up in the 5/4/3 array position only, these will have a final : with port if they are an IP
+	#Acknowledgement from: http://stackoverflow.com/questions/319279/how-to-validate-ip-address-in-python
+	if ":" in parts[5]:
+		subparts = parts[5].rsplit(":", 1)
+		if isIPV6(subparts[0]) and (len(subparts) > 1):
+			return line.replace(parts[5], "%s %s" % (subparts[0], subparts[1]))
+	if ":" in parts[4]:
+		subparts = parts[4].rsplit(":", 1)
+		if isIPV6(subparts[0]) and (len(subparts) > 1):
+			return line.replace(parts[4], "%s %s" % (subparts[0], subparts[1]))
+	elif ":" in parts[3]:
+		subparts = parts[3].rsplit(":", 1)
+		if isIPV6(subparts[0]) and (len(subparts) > 1):
+			return line.replace(parts[3], "%s %s" % (subparts[0], subparts[1]))
+	return line
+
 def clean(line):
 	line = line.strip()
+	#TODO remove
+	print(line)
 	if len(line) < 20:
 		return ""
-	line = str(line)[2:-1] #convert byte into string
 	line = spacePorts.sub('\\1 \\2', line)
+	line = splitIPV6Ports(line)
 	line = removeHost.sub('', line)
 	line = fixTime.sub('\\1 \\2', line)
 	
 	#we are missing a backend processing time, since a 504 fails, so replace this on the lines where we have a 504, eliminating many errors
 	line = line.replace("-1 -1 -1 504 0 0 0", "-1 -1 -1 -1 504 0 0 0")
+	line = line.replace("-1 -1 -1 502 0 0 0", "-1 -1 -1 -1 502 0 0 0")
 	
-	splt = len(shlex.split(line)) #lexical parse gives me tokens enclosed by quotes for url string
+	parts = shlex.split(line) #lexical parse gives me tokens enclosed by quotes for url string as awstats sees them
+	splt = len(parts) #lexical parse gives me tokens enclosed by quotes for url string
 	if splt is 15:
 		line = ("%s \"\" - -\n" % line)
 	elif splt is 16:
@@ -304,21 +345,56 @@ def enQueueNonCompletedDirectory(directory):
 	logProcQueue.write(queuemessage)
 
 signal.signal(signal.SIGINT, handle_SIGINT_MAIN)
+
+#specific date processing support
+manual_dirlist = list()
+matchdir = False
+if DATE_TO_PROCESS is not False:
+	#MMDDYYYY
+	m = DATE_TO_PROCESS[:2]
+	d = DATE_TO_PROCESS[2:4]
+	y = DATE_TO_PROCESS[4:]
+	matchdir = "%s/%s/%s/" % (y,m,d)
+	s3conn = boto.connect_s3(SRC_AWS_ACCESS_KEY, SRC_AWS_SECRET_KEY)
+	bucket = s3conn.get_bucket(SRC_PATH[:SRC_PATH.index('/')])
+	for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'):
+		yearint = year.name[-5:-1]
+		for month in bucket.list(prefix=year.name, delimiter='/'):
+			monthint = month.name[-3:-1]
+			for day in bucket.list(prefix=month.name, delimiter='/'):
+				dirlist = list()
+				dayint = day.name[-3:-1]
+				srcdir = day.name
+				dstdir = "%s/%s/%s/" % (yearint, monthint, dayint)
+				if matchdir in dstdir:
+					for fileWithPath in bucket.list(prefix=srcdir, delimiter='/'):
+						fname = fileWithPath.name.split('/')[-1]
+						manual_dirlist.append(fname)
+	s3conn.close()
+
+#queue processing mode (if a date isn't set)
 while True:
-	count = 0
-	message = readQueue()
-	if message is None:
-		count = count + 1
-		if count > 5:
-			print("There were no messages in the queue, no need to remain operational.  Quitting.")
-			sys.exit(0)
-		print("No data in queue, waiting 5 seconds and trying again")
-		time.sleep(5) #5 second sleep, 25 second total wait from queue before we consider all tasks done for the day		
-		continue
-	count = 0
-	data = json.loads(message)
-	DIRECTORY = data['directory'] #appended to src and dst path from configuration file
-	tasks = data['tasklist']
+	if (len(manual_dirlist) > 0) and (matchdir is not False):
+		print ("Manual directory provided, Queue disabled")
+		DIRECTORY = matchdir
+		tasks = list(manual_dirlist)
+	else:
+		print("Queue Mode Enabled")
+		count = 0
+		message = readQueue()
+		if message is None:
+			count = count + 1
+			if count > 5:
+				print("There were no messages in the queue, no need to remain operational.  Quitting.")
+				sys.exit(0)
+			print("No data in queue, waiting 5 seconds and trying again")
+			time.sleep(5) #5 second sleep, 25 second total wait from queue before we consider all tasks done for the day		
+			continue
+		count = 0
+		data = json.loads(message)
+		DIRECTORY = data['directory'] #appended to src and dst path from configuration file
+		tasks = data['tasklist']
+	
 	if createLock(DIRECTORY):
 		with concurrent.futures.ProcessPoolExecutor() as executor:
 			executor.map(compress, tasks)
@@ -328,10 +404,13 @@ while True:
 		releaseLock(DIRECTORY)
 	else:
 		print("Exiting without doing work, couldn't acquire a lock for processing the date associated with %s." % tasks[0]);
+	if (len(manual_dirlist) > 0) and (matchdir is not False):
+		print("Directory \"%s\"has been processed, exiting now." % matchdir)
+		sys.exit(0)
+	#TODO remove this once it works
 	print("Done")
 	sys.exit(0)
 
 #TODO
 #on kill we need to run enQueueNonCompletedDirectory(DIRECTORY) and then releaseLock(DIRECTORY)
 #TODO we need to add a thread to the parent idle process that checks aws meta data for termination notice
-#TODO, need to add date ability to process specific date (in the event many dates in queue and I want to process a newer date)
