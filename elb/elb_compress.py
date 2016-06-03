@@ -15,9 +15,11 @@ Changes:
 	5/30/16 - Incorporated SQS for spot instance use, not ready to use yet
 	5/31/16 - Added compression support / upload to s3 support / lock/status file updates (for parts)
 	6/2/16 - Finalized Script
+	6/3/16 - added signal killing abilities, not tested yet in this commit #TODO
 '''
 
 import sys
+import signal
 from io import BytesIO
 import boto
 import boto.sqs
@@ -75,6 +77,15 @@ fixTime = re.compile('([0-9]{4}-[0-9]{2}-[0-9]{2})T([0-9]{2}:[0-9]{2}:[0-9]{2})\
 DIRECTORY = ""#what comes after both SRC_PATH and DST_PATH, folder wise, received via Queue
 CHUNK_SIZE = 8192 #compression block size
 awsmetaurl = "http://169.254.169.254/latest/meta-data/instance-id"
+
+def handle_SIGINT_THREADS(signum, frame):
+	print("Thread canceling")
+
+def handle_SIGINT_MAIN(signum, frame):
+	print("Caught the kill signal from ctrl c, Publishing directory \"%s\" to incomplete queue" % DIRECTORY)
+	enQueueNonCompletedDirectory(DIRECTORY)
+	releaseLock(DIRECTORY)
+	sys.exit(0)
 
 def createLock(filePath):
 	dst_s3conn = boto.connect_s3(DST_AWS_ACCESS_KEY, DST_AWS_SECRET_KEY)
@@ -166,6 +177,7 @@ def updateStatusFile(completedFile, completionListVerify=list()):
 	print("Updated Status file with latest data, file %s" % theCompletedFile)
 
 def compress(src): #takes in a filename that is in the SRCPATH directory and places a compressed/gzipped version into DSTPATH
+	signal.signal(signal.SIGINT, handle_SIGINT_THREADS)
 	if len(src) < 15:
 		return
 	src_s3conn = boto.connect_s3(SRC_AWS_ACCESS_KEY, SRC_AWS_SECRET_KEY)
@@ -291,6 +303,7 @@ def enQueueNonCompletedDirectory(directory):
 	print("Enqueing Directory (YYYY/MM/DD) %s for re-scheduling and re-processing due to incomplete processing with me" % data_out['directory'])
 	logProcQueue.write(queuemessage)
 
+signal.signal(signal.SIGINT, handle_SIGINT_MAIN)
 while True:
 	count = 0
 	message = readQueue()
