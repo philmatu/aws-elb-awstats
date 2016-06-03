@@ -318,4 +318,7 @@ while True:
 	print("Done")
 	sys.exit(0)
 
+#TODO
+#on kill we need to run enQueueNonCompletedDirectory(DIRECTORY) and then releaseLock(DIRECTORY)
 
+#TODO we need to add a thread to the parent idle process that checks aws meta data for termination notice
