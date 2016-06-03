@@ -50,7 +50,7 @@ if len(sys.argv) == 2 or len(sys.argv) == 3:
 			sys.exit(0)
 else:
         print ("usage: ./compress_scheduler.py <configfile> [<date_to_handle_in_MMDDYYYY>]")
-        sys.exit(0)
+	sys.exit(0)
 
 #Load configuration from ini file
 SRC_PATH = CONFIG.get('main', 'SRC_PATH')
