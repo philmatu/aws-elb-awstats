@@ -303,12 +303,8 @@ while True:
 	DIRECTORY = data['directory'] #appended to src and dst path from configuration file
 	tasks = data['tasklist']
 	if createLock(DIRECTORY):
-		
-		#compress(tasks[1]) #TODO testing function call
-		#compress(tasks[2]) #TODO testing function call
-		#TODO remove max workers
-		#with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
-		#	executor.map(compress, tasks)
+		with concurrent.futures.ProcessPoolExecutor() as executor:
+			executor.map(compress, tasks)
 		with WRITE_LOCK:
 			src_path = "%s%s" % (DST_PATH.split("/", 1)[1], DIRECTORY)
 			updateStatusFile(src_path, tasks) #completion is here if all checks out... we assume that the scheduler's queue has all the tasks for a day in this list

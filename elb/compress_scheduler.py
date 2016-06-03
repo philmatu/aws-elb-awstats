@@ -16,6 +16,7 @@ Changes:
 	5/30/16 - Final Logic to get data into SQS
 	5/31/16 - Added date-to-handle parameter option to avoid back-processing
 	6/1/16 - Status file in gz format accounted for, still needs to account for reprocess queue
+	6/2/16 - Finalized Script with Queues implemented
 '''
 
 import sys
@@ -29,6 +30,7 @@ import json
 CONFIG = configparser.ConfigParser()
 
 DATE_TO_PROCESS = False
+ENQUEUED_TASKS = list()
 if len(sys.argv) == 2 or len(sys.argv) == 3:
 	inputini = sys.argv[1];
 	if inputini.endswith(".ini"):
@@ -80,6 +82,7 @@ def enqueue(dstdir, tasks):
 	queuemessage.set_body(json_tasks)
 	print("Enqueing Task %s" % data_out['directory'])
 	logProcQueue.write(queuemessage)
+	qconn.close()
 
 #destination directory of the remote server, and the files that should be there (plus the status file)
 def processDirectory(dstdir, dirlist):
@@ -181,6 +184,8 @@ def processDirectory(dstdir, dirlist):
 	
 	if len(ToBeProcessedFiles) > 0:
 		enqueue(dstdir, ToBeProcessedFiles)
+		ENQUEUED_TASKS.append(dstdir)
+	dests3conn.close()
 
 def readIncompleteQueue():
 	qconn = boto.sqs.connect_to_region("us-east-1", aws_access_key_id=QUEUE_AWS_ACCESS_KEY, aws_secret_access_key=QUEUE_AWS_SECRET_KEY)
@@ -188,15 +193,17 @@ def readIncompleteQueue():
 	if logProcQueue is None:
 		print("Checked the incomplete queue %s, nothing was there, so we'll continue with scheduling as normal")
 		return list()
-	messages = logProcQueue.get_messages(wait_time_seconds=1)
-	out = list()
-	for message in messages:
-		raw_json = message.get_body()
-		data = json.loads(raw_json)
-		if len(data['directory']) > 0:
-			out.append(data['directory'][:-1])#remove final / which is in directory
-		#TODO remove comment once this works
-		#logProcQueue.delete_message(message)
+	out = set()#ensures unique values
+	messages = logProcQueue.get_messages(wait_time_seconds=2, num_messages=10)
+	while len(messages) > 0:
+		for message in messages:
+			raw_json = message.get_body()
+			data = json.loads(raw_json)
+			if len(data['directory']) > 0:
+				out.add(data['directory'][:-1])#remove final / which is in directory
+			logProcQueue.delete_message(message)
+		messages = logProcQueue.get_messages(wait_time_seconds=2, num_messages=10)#continue reading
+	qconn.close()
 	return out
 
 #Begin main code
@@ -209,7 +216,7 @@ if DATE_TO_PROCESS is not False:
 	y = DATE_TO_PROCESS[4:]
 	matchdir = "%s/%s/%s" % (y,m,d)
 
-incompleteList = readIncompleteQueue()	
+INCOMPLETE_LIST = readIncompleteQueue()
 s3conn = boto.connect_s3(SRC_AWS_ACCESS_KEY, SRC_AWS_SECRET_KEY)
 bucket = s3conn.get_bucket(SRC_PATH[:SRC_PATH.index('/')])
 for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'): 
@@ -221,8 +228,6 @@ for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'):
 			dayint = day.name[-3:-1]
 			srcdir = day.name
 			dstdir = "%s/%s/%s" % (yearint, monthint, dayint)
-			#if len(incompleteList) > 0:
-			#TODO the processor should never go forward past this date or something, logic not fully figured out
 			if matchdir is not False:
 				if dstdir not in matchdir:
 					continue
@@ -230,4 +235,9 @@ for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'):
 				fname = fileWithPath.name.split('/')[-1]
 				dirlist.append(fname)
 			processDirectory(dstdir, dirlist)
+for task in INCOMPLETE_LIST:
+	if task not in ENQUEUED_TASKS:
+		print("WARNING: The task \"%s\" wasn't queued for reprocessing, yet it failed on a worker... Please manually verify!" % task)
+	else:
+		print("info: The task \"%s\" was queued for reprocessing... it previously failed on a worker node." % task)
 s3conn.close()
