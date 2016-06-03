@@ -19,6 +19,7 @@ Changes:
 '''
 
 import sys
+import os
 import signal
 from io import BytesIO
 import boto
@@ -84,20 +85,23 @@ removeHost = re.compile('(http|https)://.*:(80|443)')
 fixTime = re.compile('([0-9]{4}-[0-9]{2}-[0-9]{2})T([0-9]{2}:[0-9]{2}:[0-9]{2})\.[0-9]*Z')
 
 #global constant variables
+EXECUTOR = None
+FUTURES = None
 DIRECTORY = ""#what comes after both SRC_PATH and DST_PATH, folder wise, received via Queue
 CHUNK_SIZE = 8192 #compression block size
 awsmetaurl = "http://169.254.169.254/latest/meta-data/instance-id"
 
 def handle_SIGINT_THREADS(signum, frame):
-	print("Thread canceling")
+	print("Ending my thread now")
+	os.system('kill $PPID')
 
 def handle_SIGINT_MAIN(signum, frame):
 	if len(DIRECTORY) > 0:
-		print("Caught the kill signal from ctrl c, Publishing directory \"%s\" to incomplete queue" % DIRECTORY)
+		print("Caught the kill signal from ctrl c, Publishing directory \"%s\" to incomplete queue (unless manual mode)" % DIRECTORY)
 		enQueueNonCompletedDirectory(DIRECTORY)
 		releaseLock(DIRECTORY)
-	print("Exiting gracefully... Goodbye.")
-	sys.exit(0)
+	
+	os.system('kill $PPID')
 
 def createLock(filePath):
 	dst_s3conn = boto.connect_s3(DST_AWS_ACCESS_KEY, DST_AWS_SECRET_KEY)
@@ -123,7 +127,7 @@ def releaseLock(filePath):
 	lock_file_path = "%s%s%s" % (DST_PATH[DST_PATH.index('/'):],filePath,PROCESSING_LOCK_FILE)
 	lock_file_key = Key(dst_bucket, lock_file_path)
 	if not lock_file_key.exists():
-		print("OH CRAP... There was no lock... hoping nothing went wrong!  You may want to verify this.")
+		print("There was no lock... hoping nothing went wrong!  You may want to verify this.")
 		return False
 	else:
 		instanceid = bytes(lock_file_key.get_contents_as_string()).decode(encoding='UTF-8')
@@ -143,7 +147,8 @@ def isAlreadyInStatusFile(completedFile):
 	status_file_key = Key(dst_bucket, status_file_path)
 	theCompletedFile = completedFile.rsplit('/', 1)[1]
 	if not status_file_key.exists():
-		return True
+		status_file_key.set_contents_from_string('')
+		return False
 	else:
 		status_file_text = bytes(status_file_key.get_contents_as_string()).decode(encoding='UTF-8')
 		if theCompletedFile in status_file_text:
@@ -189,6 +194,7 @@ def updateStatusFile(completedFile, completionListVerify=list()):
 	print("Updated Status file with latest data, file %s" % theCompletedFile)
 
 def compress(src): #takes in a filename that is in the SRCPATH directory and places a compressed/gzipped version into DSTPATH
+	#create signal for subprocess
 	signal.signal(signal.SIGINT, handle_SIGINT_THREADS)
 	if len(src) < 15:
 		return
@@ -207,12 +213,15 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 		print("The file %s is already in the status file, meaning it should be done... skipping" % dst_path_sans_GZ)
 		return
 
+	print("Compressing the file %s" % src)
+
 	buf = "" #buffer to hold onto chunks of data at a time
 	part = 1
 	outStream = BytesIO()
 	compressor = gzip.GzipFile(fileobj=outStream, mode='wb')
 	with smart_open.smart_open(srcFileKey) as srcStream:
 		for line in srcStream:
+			line = bytes(line).decode('UTF-8')
 			cleanedString = clean(line)
 			if len(cleanedString) < 1:
 				continue
@@ -250,24 +259,26 @@ def splitIPV6Ports(line):
 	#after ipv4 split... try for ipv6
 	#split ipv6 addresses, this could show up in the 5/4/3 array position only, these will have a final : with port if they are an IP
 	#Acknowledgement from: http://stackoverflow.com/questions/319279/how-to-validate-ip-address-in-python
+	parts = shlex.split(line) #lexical parse gives me tokens enclosed by quotes for url string as awstats sees them
 	if ":" in parts[5]:
 		subparts = parts[5].rsplit(":", 1)
 		if isIPV6(subparts[0]) and (len(subparts) > 1):
+			print("2HERE")
 			return line.replace(parts[5], "%s %s" % (subparts[0], subparts[1]))
-	if ":" in parts[4]:
+	elif ":" in parts[4]:
 		subparts = parts[4].rsplit(":", 1)
 		if isIPV6(subparts[0]) and (len(subparts) > 1):
+			print("1HERE")
 			return line.replace(parts[4], "%s %s" % (subparts[0], subparts[1]))
 	elif ":" in parts[3]:
 		subparts = parts[3].rsplit(":", 1)
 		if isIPV6(subparts[0]) and (len(subparts) > 1):
+			print("HERE")
 			return line.replace(parts[3], "%s %s" % (subparts[0], subparts[1]))
 	return line
 
 def clean(line):
 	line = line.strip()
-	#TODO remove
-	print(line)
 	if len(line) < 20:
 		return ""
 	line = spacePorts.sub('\\1 \\2', line)
@@ -331,6 +342,8 @@ def readQueue():
 	return None
 
 def enQueueNonCompletedDirectory(directory):
+	if DATE_TO_PROCESS is not False:
+		return #don't queue when running in manual mode
 	qconn = boto.sqs.connect_to_region("us-east-1", aws_access_key_id=QUEUE_AWS_ACCESS_KEY, aws_secret_access_key=QUEUE_AWS_SECRET_KEY)
 	logProcQueue = qconn.get_queue(INCOMPLETE_TASKS_QUEUE_NAME)
 	if logProcQueue is None:
@@ -344,9 +357,8 @@ def enQueueNonCompletedDirectory(directory):
 	print("Enqueing Directory (YYYY/MM/DD) %s for re-scheduling and re-processing due to incomplete processing with me" % data_out['directory'])
 	logProcQueue.write(queuemessage)
 
-signal.signal(signal.SIGINT, handle_SIGINT_MAIN)
-
 #specific date processing support
+signal.signal(signal.SIGINT, handle_SIGINT_MAIN)
 manual_dirlist = list()
 matchdir = False
 if DATE_TO_PROCESS is not False:
@@ -411,6 +423,4 @@ while True:
 	print("Done")
 	sys.exit(0)
 
-#TODO
-#on kill we need to run enQueueNonCompletedDirectory(DIRECTORY) and then releaseLock(DIRECTORY)
 #TODO we need to add a thread to the parent idle process that checks aws meta data for termination notice
