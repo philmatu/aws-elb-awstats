@@ -223,6 +223,10 @@ def clean(line):
 	line = spacePorts.sub('\\1 \\2', line)
 	line = removeHost.sub('', line)
 	line = fixTime.sub('\\1 \\2', line)
+	
+	#we are missing a backend processing time, since a 504 fails, so replace this on the lines where we have a 504, eliminating many errors
+	line = line.replace("-1 -1 -1 504 0 0 0", "-1 -1 -1 -1 504 0 0 0")
+	
 	splt = len(shlex.split(line)) #lexical parse gives me tokens enclosed by quotes for url string
 	if splt is 15:
 		line = ("%s \"\" - -\n" % line)
