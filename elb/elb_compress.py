@@ -333,5 +333,5 @@ while True:
 
 #TODO
 #on kill we need to run enQueueNonCompletedDirectory(DIRECTORY) and then releaseLock(DIRECTORY)
-
 #TODO we need to add a thread to the parent idle process that checks aws meta data for termination notice
+#TODO, need to add date ability to process specific date (in the event many dates in queue and I want to process a newer date)
