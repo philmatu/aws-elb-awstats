@@ -235,6 +235,7 @@ for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'):
 			dayint = day.name[-3:-1]
 			srcdir = day.name
 			dstdir = "%s/%s/%s" % (yearint, monthint, dayint)
+			#TODO: skip today's date
 			if matchdir is not False:
 				if dstdir not in matchdir:
 					continue
