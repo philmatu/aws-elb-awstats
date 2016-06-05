@@ -77,6 +77,7 @@ QUEUE_NAME = CONFIG.get('main', 'QUEUE_NAME')
 INCOMPLETE_TASKS_QUEUE_NAME = CONFIG.get('main', 'INCOMPLETE_TASKS_QUEUE_NAME')
 QUEUE_AWS_ACCESS_KEY = CONFIG.get('main', 'QUEUE_AWS_ACCESS_KEY')
 QUEUE_AWS_SECRET_KEY = CONFIG.get('main', 'QUEUE_AWS_SECRET_KEY')
+AWS_SPOT_CHECK_SLEEP_INTERVAL_SECONDS = int(CONFIG.get('main', 'AWS_SPOT_CHECK_SLEEP_INTERVAL_SECONDS'))
 #this script does not process anything from the current day due to added logic to keep track of hourly file dumps
 
 #compiled regex for threading, these compiled bits are thread safe
@@ -84,12 +85,13 @@ spacePorts = re.compile('( \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):([0-9][0-9]*)')
 removeHost = re.compile('(http|https)://.*:(80|443)')
 fixTime = re.compile('([0-9]{4}-[0-9]{2}-[0-9]{2})T([0-9]{2}:[0-9]{2}:[0-9]{2})\.[0-9]*Z')
 
-#global constant variables
+#global constant variables that we don't need to configure
 EXECUTOR = None
 FUTURES = None
 DIRECTORY = ""#what comes after both SRC_PATH and DST_PATH, folder wise, received via Queue
 CHUNK_SIZE = 8192 #compression block size
-awsmetaurl = "http://169.254.169.254/latest/meta-data/instance-id"
+AWS_META_INSTANCEID_URL = "http://169.254.169.254/latest/meta-data/instance-id"
+AWS_META_SPOTTERMINATIONTIME_URL = "http://169.254.169.254/latest/meta-data/spot/termination-time" #filled in with time if spot instance is set to terminate
 
 def handle_SIGINT_THREADS(signum, frame):
 	print("Ending my thread now")
@@ -109,7 +111,7 @@ def createLock(filePath):
 	lock_file_path = "%s%s%s" % (DST_PATH[DST_PATH.index('/'):],filePath,PROCESSING_LOCK_FILE)
 	lock_file_key = Key(dst_bucket, lock_file_path)
 	if not lock_file_key.exists():
-		resource = urllib.request.urlopen(awsmetaurl)
+		resource = urllib.request.urlopen(AWS_META_INSTANCEID_URL)
 		instanceid = resource.read().decode('utf-8')
 		lock_file_key.set_contents_from_string(instanceid)
 		print("The lock is now acquired to begin processing on %s" % lock_file_path)
@@ -131,7 +133,7 @@ def releaseLock(filePath):
 		return False
 	else:
 		instanceid = bytes(lock_file_key.get_contents_as_string()).decode(encoding='UTF-8')
-		resource = urllib.request.urlopen(awsmetaurl)
+		resource = urllib.request.urlopen(AWS_META_INSTANCEID_URL)
 		myinstanceid = resource.read().decode('utf-8')
 		if myinstanceid not in instanceid:
 			print("WARNING: the instance id's don't match, mine is %s, the lock one is %s" %(myinstanceid,instanceid))
@@ -357,8 +359,35 @@ def enQueueNonCompletedDirectory(directory):
 	print("Enqueing Directory (YYYY/MM/DD) %s for re-scheduling and re-processing due to incomplete processing with me" % data_out['directory'])
 	logProcQueue.write(queuemessage)
 
+def checkForTerminationThread():
+	while 1:
+		try:
+			spotdataresource = urllib.request.urlopen(AWS_META_SPOTTERMINATIONTIME_URL)
+		except urllib.error.HTTPError as e:
+			# Return code error (e.g. 404, 501, ...) as e.code
+			if e.code == 404:
+				print("the spot instance isn't scheduled for termination, continuing processing")
+			else:
+				print("There was an error with the request, but it wasn't a 404, but rather it was \"%s\"... continuing processing" % e.code)
+		except urllib.error.URLError as e:
+			#not an http error
+			print('URLError of some type getting spot instance termination time, error will be printed now and then more processing will happen')
+			print(e)
+		else:
+			the_termination_time = resource.read().decode('utf-8')
+			print("The spot instance will terminate at %s... starting shutdown" % the_termination_time)
+			os.system('kill $PPID')
+			#TODO look into terminating instance here
+		time.sleep(AWS_SPOT_CHECK_SLEEP_INTERVAL_SECONDS)
+
+#start main thread
+
 #specific date processing support
 signal.signal(signal.SIGINT, handle_SIGINT_MAIN)
+
+spot_term_thread = threading.Thread(target = checkForTerminationThread)
+spot_term_thread.start()
+
 manual_dirlist = list()
 matchdir = False
 if DATE_TO_PROCESS is not False:
@@ -419,8 +448,3 @@ while True:
 	if (len(manual_dirlist) > 0) and (matchdir is not False):
 		print("Directory \"%s\"has been processed, exiting now." % matchdir)
 		sys.exit(0)
-	#TODO remove this once it works
-	print("Done")
-	sys.exit(0)
-
-#TODO we need to add a thread to the parent idle process that checks aws meta data for termination notice
