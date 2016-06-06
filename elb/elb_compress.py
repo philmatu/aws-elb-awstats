@@ -87,6 +87,7 @@ AWS_SPOT_CHECK_SLEEP_INTERVAL_SECONDS = int(CONFIG.get('main', 'AWS_SPOT_CHECK_S
 #compiled regex for threading, these compiled bits are thread safe
 spacePorts = re.compile('( \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):([0-9][0-9]*)')
 removeHost = re.compile('(http|https)://.*:(80|443)')
+ET_TZ=pytz.timezone(LOCAL_PYTZ_TIMEZONE)
 
 #global constant variables that we don't need to configure
 EXECUTOR = None
@@ -299,12 +300,11 @@ def splitIPV6Ports(line):
 			return line.replace(parts[3], "%s %s" % (subparts[0], subparts[1]))
 	return line
 
-#takes full line of log file in format 2016-05-12T21:48:58.253468Z appelb-pr-ElasticL-3M29U6FNWKZ7... and converts the time into a local timexzone as configured
+#takes full line of log file in format 2016-05-12T21:48:58.253468Z appelb-pr-ElasticL-3M29U6FNWKZ7... and converts the time into a local timezone as configured
 #logresolvmerge will automatically merge this data together on the day of the year where there is a time change / overlap
 def convertTimeToLocal(line):
 	parts = line.split(" ", 1)
 	gmt_dt = iso8601.parse_date(parts[0])
-	ET_TZ=pytz.timezone(LOCAL_PYTZ_TIMEZONE)
 	et_dt = gmt_dt.astimezone(ET_TZ)
 	return ("%s %s" % (et_dt.strftime('%Y-%m-%d %H:%M:%S'), parts[1]))
 
@@ -312,6 +312,8 @@ def clean(line):
 	line = line.strip()
 	if len(line) < 20:
 		return ""
+	if line.startswith("#"):
+		return "" #ignore comments
 	line = convertTimeToLocal(line)
 	line = spacePorts.sub('\\1 \\2', line)
 	line = splitIPV6Ports(line)
