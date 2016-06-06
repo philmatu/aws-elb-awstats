@@ -12,7 +12,7 @@ I started with ami 13be557e (16.04-lts)
 ran: apt-get update && apt-get upgrade -y && apt-get dist-upgrade -y
 changed lts to normal: vim /etc/update-manager/release-upgrades
 ran: do-release-upgrade -d
-ran: apt-get install python3-boto python3-pip apache2 libgeo-ipfree-perl libnet-ip-perl
+ran: apt-get install python3-boto python3-pip apache2 libgeo-ipfree-perl libnet-ip-perl python3-iso8601 python3-tz libnet-dns-perl
 ran: pip3 install smart_open
 ran: pip3 install configparser
 ran: apt-get install awstats

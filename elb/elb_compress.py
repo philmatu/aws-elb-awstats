@@ -16,6 +16,7 @@ Changes:
 	5/31/16 - Added compression support / upload to s3 support / lock/status file updates (for parts)
 	6/2/16 - Finalized Script
 	6/3/16 - added signal killing abilities, not tested yet in this commit #TODO
+	6/6/16 - Added timezone conversion and many bugfixes
 '''
 
 import sys
@@ -30,6 +31,8 @@ import smart_open
 import threading
 import concurrent.futures
 import json
+import iso8601
+import pytz
 import time
 import shlex
 import re
@@ -63,6 +66,7 @@ else:
 	sys.exit(0)
 
 #Load configuration from ini file
+LOCAL_PYTZ_TIMEZONE = CONFIG.get('main', 'LOCAL_PYTZ_TIMEZONE')
 SRC_PATH = CONFIG.get('main', 'SRC_PATH')
 SRC_AWS_ACCESS_KEY = CONFIG.get('main', 'SRC_AWS_ACCESS_KEY')
 SRC_AWS_SECRET_KEY = CONFIG.get('main', 'SRC_AWS_SECRET_KEY')
@@ -83,7 +87,6 @@ AWS_SPOT_CHECK_SLEEP_INTERVAL_SECONDS = int(CONFIG.get('main', 'AWS_SPOT_CHECK_S
 #compiled regex for threading, these compiled bits are thread safe
 spacePorts = re.compile('( \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):([0-9][0-9]*)')
 removeHost = re.compile('(http|https)://.*:(80|443)')
-fixTime = re.compile('([0-9]{4}-[0-9]{2}-[0-9]{2})T([0-9]{2}:[0-9]{2}:[0-9]{2})\.[0-9]*Z')
 
 #global constant variables that we don't need to configure
 EXECUTOR = None
@@ -296,14 +299,23 @@ def splitIPV6Ports(line):
 			return line.replace(parts[3], "%s %s" % (subparts[0], subparts[1]))
 	return line
 
+#takes full line of log file in format 2016-05-12T21:48:58.253468Z appelb-pr-ElasticL-3M29U6FNWKZ7... and converts the time into a local timexzone as configured
+#logresolvmerge will automatically merge this data together on the day of the year where there is a time change / overlap
+def convertTimeToLocal(line):
+	parts = line.split(" ", 1)
+	gmt_dt = iso8601.parse_date(parts[0])
+	ET_TZ=pytz.timezone(LOCAL_PYTZ_TIMEZONE)
+	et_dt = gmt_dt.astimezone(ET_TZ)
+	return ("%s %s" % (et_dt.strftime('%Y-%m-%d %H:%M:%S'), parts[1]))
+
 def clean(line):
 	line = line.strip()
 	if len(line) < 20:
 		return ""
+	line = convertTimeToLocal(line)
 	line = spacePorts.sub('\\1 \\2', line)
 	line = splitIPV6Ports(line)
 	line = removeHost.sub('', line)
-	line = fixTime.sub('\\1 \\2', line)
 	
 	#we are missing a backend processing time, since a 504 fails, so replace this on the lines where we have a 504, eliminating many errors
 	line = line.replace("-1 -1 -1 504 0 0 0", "-1 -1 -1 -1 504 0 0 0")

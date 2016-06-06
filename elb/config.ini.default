@@ -1,4 +1,5 @@
 [main]
+LOCAL_PYTZ_TIMEZONE = US/Eastern
 AWS_SPOT_CHECK_SLEEP_INTERVAL_SECONDS = 15
 SRC_PATH = example-logs/elb/AWSLogs/46735675431/elasticloadbalancing/us-east-1/
 SRC_AWS_ACCESS_KEY = ACCESSS3KEY
