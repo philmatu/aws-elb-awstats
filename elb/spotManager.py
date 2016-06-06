@@ -60,6 +60,7 @@ DST_PATH = CONFIG.get('main', 'DST_PATH')
 DST_AWS_ACCESS_KEY = CONFIG.get('main', 'DST_AWS_ACCESS_KEY')
 DST_AWS_SECRET_KEY = CONFIG.get('main', 'DST_AWS_SECRET_KEY')
 PROCESSING_LOCK_FILE = CONFIG.get('main', 'PROCESSING_LOCK_FILE')
+INSTANCE_NAME_TAG = CONFIG.get('spot', 'INSTANCE_NAME_TAG')
 
 #main implementation 
 def releaseLock(filePath):
@@ -75,7 +76,7 @@ def releaseLock(filePath):
 		print("The lock file has been removed, the instance it was running on is \"%s\"" % instanceid)
 	dst_s3conn.close()
 
-def getLocksWithoutMatchingInstance():
+def getLocks():
 	out = list()
 	dst_s3conn = boto.connect_s3(DST_AWS_ACCESS_KEY, DST_AWS_SECRET_KEY)
 	bucket = dst_s3conn.get_bucket(DST_PATH[:DST_PATH.index('/')])
@@ -95,21 +96,29 @@ def getLocksWithoutMatchingInstance():
 
 #command implementation 
 
+#TODO: List all instances and locks, note if instance is active, note if instance has a job running
 def do_listall():
 	return "True"
 
-def do_listutilized():
+#TODO: List all instances that are running but have no jobs attached to them
+def do_listorphanedinstances():
 	return "True"
 
-def do_listnotutilized():
+#TODO List all locks that mismatch with what the instance says it's doing
+def do_listmismatchedlocks():
 	return "True"
 
-def do_listlockswithoutmatchinginstance():
-	data = getLocksWithoutMatchingInstance()
-	print (data)
-	if DELETE_CMD:
-		print("Not implemented, delete requested")	
+#TODO List all locks that don't have an associated instance that is running
+def do_listorphanedlocks():
+	locks = getLocks()
+	for lock in locks:
+		parts = lock.split("~")
+		lockfilepath = parts[0]
+		instanceid = parts[1]
+		if DELETE_CMD:
+			print("Not implemented, delete requested")	
 
+#TODO only allow lock delete if it is not associated with a running instance, otherwise make force option
 def do_deletelock():
 	if DELETE_CMD.isdigit():
 		#MMDDYYYY

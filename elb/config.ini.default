@@ -15,3 +15,5 @@ QUEUE_NAME = prod-log-compress
 INCOMPLETE_TASKS_QUEUE_NAME = prod-log-compress-incomplete-tasks
 QUEUE_AWS_ACCESS_KEY = ACCESSSQSKEY
 QUEUE_AWS_SECRET_KEY = SECRETSQSKEY
+[spot]
+INSTANCE_NAME_TAG = plogworker_
