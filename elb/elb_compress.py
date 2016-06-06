@@ -142,6 +142,19 @@ def releaseLock(filePath):
 	dst_s3conn.close()
 	return False
 
+def directoryAlreadyCompleted(path):
+	dst_s3conn = boto.connect_s3(DST_AWS_ACCESS_KEY, DST_AWS_SECRET_KEY)
+	dst_bucket = dst_s3conn.get_bucket(DST_PATH[:DST_PATH.index('/')])
+	status_file_path = "%s%s%s" % (DST_PATH[DST_PATH.index('/'):],path,PROCESSING_STATUS_FILE)
+	status_file_key = Key(dst_bucket, status_file_path)
+	if not status_file_key.exists():
+		return False
+	else:
+		status_file_text = bytes(status_file_key.get_contents_as_string()).decode(encoding='UTF-8')
+		if PROCESSING_STATUS_FILE_COMPLETE_TXT in status_file_text:
+			return True
+	return False
+
 def isAlreadyInStatusFile(completedFile):
 	dst_s3conn = boto.connect_s3(DST_AWS_ACCESS_KEY, DST_AWS_SECRET_KEY)
 	dst_bucket = dst_s3conn.get_bucket(DST_PATH[:DST_PATH.index('/')])
@@ -181,6 +194,10 @@ def updateStatusFile(completedFile, completionListVerify=list()):
 					return
 			for line in status_file_text.split("\n"):
 				if line not in completionListVerify:
+					if PROCESSING_STATUS_FILE_COMPLETE_TXT in line:
+						#if we manage to get this far with a complete status file, don't rewrite the data into it
+						print("The directory \"%s\" was already completed, not sure how we got here, but it's ok, I'll end processing now."%completedFile)
+						return
 					print("The line \"%s\" was not found in the list of tasks, this means I didn't complete successfully... I will notify the scheduler queue of my directory: %s" % (line,completedFile))
 					enQueueNonCompletedDirectory(DIRECTORY)#string in YYYY/MM/DD from the original queue
 					return
@@ -365,9 +382,7 @@ def checkForTerminationThread():
 			spotdataresource = urllib.request.urlopen(AWS_META_SPOTTERMINATIONTIME_URL)
 		except urllib.error.HTTPError as e:
 			# Return code error (e.g. 404, 501, ...) as e.code
-			if e.code == 404:
-				print("the spot instance isn't scheduled for termination, continuing processing")
-			else:
+			if e.code != 404:
 				print("There was an error with the request, but it wasn't a 404, but rather it was \"%s\"... continuing processing" % e.code)
 		except urllib.error.URLError as e:
 			#not an http error
@@ -437,14 +452,17 @@ while True:
 		tasks = data['tasklist']
 	
 	if createLock(DIRECTORY):
-		with concurrent.futures.ProcessPoolExecutor() as executor:
-			executor.map(compress, tasks)
-		with WRITE_LOCK:
-			src_path = "%s%s" % (DST_PATH.split("/", 1)[1], DIRECTORY)
-			updateStatusFile(src_path, tasks) #completion is here if all checks out... we assume that the scheduler's queue has all the tasks for a day in this list
+		if not directoryAlreadyCompleted(DIRECTORY):
+			with concurrent.futures.ProcessPoolExecutor() as executor:
+				executor.map(compress, tasks)
+			with WRITE_LOCK:
+				src_path = "%s%s" % (DST_PATH.split("/", 1)[1], DIRECTORY)
+				updateStatusFile(src_path, tasks) #completion is here if all checks out... we assume that the scheduler's queue has all the tasks for a day in this list
+		else:
+			print("The directory \"%s\" is already completed (marked in status file)" % DIRECTORY)
 		releaseLock(DIRECTORY)
 	else:
 		print("Exiting without doing work, couldn't acquire a lock for processing the date associated with %s." % tasks[0]);
 	if (len(manual_dirlist) > 0) and (matchdir is not False):
-		print("Directory \"%s\"has been processed, exiting now." % matchdir)
-		sys.exit(0)
+		print("Directory \"%s\" has been processed, exiting now." % matchdir)
+		os.system('kill $PPID')
