@@ -10,7 +10,7 @@ Author: Philip Matuskiewicz - philip.matuskiewicz@nyct.com
 Changes:
 	5/14/16 - Initial Script
 	5/25/16 - Initial commit to repository
-	
+	6/6/16 - Timezone conversion
 Acknowledgements:
 	gzip - http://stackoverflow.com/questions/12571913/python-unzipping-stream-of-bytes
 	s3 streaming - https://github.com/piskvorky/smart_open
@@ -26,6 +26,7 @@ import smart_open
 import shutil
 import re
 import datetime
+import pytz
 import shlex
 import zlib
 import urllib.parse
@@ -47,18 +48,31 @@ else:
 #pull the configuration values ahead of time
 ROOTBUCKET = CONFIG.get('main', 'ROOTBUCKET')
 PATH = CONFIG.get('main', 'PATH')
+LOCAL_PYTZ_TIMEZONE = CONFIG.get('main', 'LOCAL_PYTZ_TIMEZONE')
 AWS_ACCESS_KEY = CONFIG.get('main', 'AWS_ACCESS_KEY')
 AWS_SECRET_KEY = CONFIG.get('main', 'AWS_SECRET_KEY')
 DOMAIN = CONFIG.get('main', 'DOMAIN')
 LOGRESOLV = CONFIG.get('main', 'LOGRESOLV')
 PROCFILE = CONFIG.get('main', 'PROCFILE')
 
+#static values
+ET_TZ=pytz.timezone(LOCAL_PYTZ_TIMEZONE)
+UTC_TZ = pytz.timezone('UTC')
 def stream_gzip_decompress(stream):
 	dec = zlib.decompressobj(32 + zlib.MAX_WBITS)  # offset 32 to skip the header
 	for chunk in stream:
 		data = dec.decompress(chunk)
 		if data:
 			yield data
+
+#takes full line of log file in format (tab separated) 2016-06-06    00:07:05    JFK5    5072    70.214.107.212    GET... and converts the time into a local timezone as configured
+#logresolvmerge will automatically merge this data together on the day of the year where there is a time change / overlap
+def convertTimeToLocal(line):
+	parts = line.split("\t", 2)
+	nonspec_dt = datetime.datetime.strptime("%s %s" % (parts[0], parts[1]), "%Y-%m-%d %H:%M:%S")
+	gmt_dt = nonspec_dt.replace(tzinfo=UTC_TZ)
+	et_dt = gmt_dt.astimezone(ET_TZ)
+	return ("%s %s" % (et_dt.strftime('%Y-%m-%d %H:%M:%S'), parts[2]))
 
 def downloadFile(bucket, path, key):
 	cont = 0
@@ -77,6 +91,9 @@ def downloadFile(bucket, path, key):
 				cont = cont + 1	
 				if cont > 2:
 					line = line.strip()
+					if line.startswith("#"):
+						continue #ignore comments
+					line = convertTimeToLocal(line)
 					data = shlex.split(line)
 					if len(data) < 12:
 						continue

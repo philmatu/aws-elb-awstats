@@ -3,6 +3,7 @@ ROOTBUCKET = site-logs
 PATH = data/
 AWS_ACCESS_KEY = 
 AWS_SECRET_KEY = 
+LOCAL_PYTZ_TIMEZONE = US/Eastern
 DOMAIN = largecloudfrontsite.example.net
 LOGRESOLV = /usr/share/awstats/tools/logresolvemerge.pl
 PROCFILE = /full/path/to/lastposition.txt
