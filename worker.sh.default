@@ -1,0 +1,5 @@
+#/bin/bash
+cd /root/aws-elb-awstats/
+/usr/bin/git pull
+/usr/bin/wget http://controller.node.com/config.ini.file -O /root/aws-elb-awstats/elb/config.ini
+/usr/bin/python3 /root/aws-elb-awstats/elb/elb_compress.py /root/aws-elb-awstats/elb/config.ini
