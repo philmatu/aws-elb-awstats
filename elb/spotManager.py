@@ -3,11 +3,15 @@
 ***
 Spot Instance Manager
 
-./spotManager.py <configfile> ListAll - Lists all instances currently tagged with my configured spot running name
-./spotManager.py <configfile> ListUtilized - Lists all instances running with a lock file present on S3 and utilization match
-./spotManager.py <configfile> ListNotUtilized [Delete] - Lists (and Deletes) all instances running that aren't processing anything
-./spotManager.py <configfile> ListLocksWithoutMatchingInstance [Delete] - Lists (and deletes) all locks that don't have a corresponding instance running the data
-./spotManager.py <configfile> DeleteLock [Locked Directory in MMDDYYYY]
+./spotManager.py <configfile> <command> [<delete>]
+
+Commands:
+ListAll - List all instances and locks, note if instance is active, note if instance has a job running
+ListOrphanedInstances - List all instances that are running but have no jobs attached to them (if "delete" is present as a second command, this will delete these instances listed)
+ListMismatchedLocks - List all locks that mismatch with what the instance says it's doing, this should be empty, but if it has a value, it's left up to the user to figure out how to fix it
+ListOrphanedLocks - List all locks that don't have an associated instance that is running (if "delete" is present as a second command, this will delete the locks listed)
+DeleteLock - Deletes the lock file for a given directory (<delete> should be in form MMDDYYYY)
+DeleteInstance - Deletes the instance specified (<delete> should be an instance-id)
 
 This application manages spot instances and management of log processing through log files and worker http requests
 ***
@@ -127,6 +131,10 @@ def do_deletelock():
 		y = DELETE_CMD[4:]
 		releaselockdir = "%s/%s/%s/" % (y,m,d)
 		releaseLock(releaselockdir)
+
+#TODO delete the instance listed
+def do_deleteinstance():
+	return "True"
 
 # run teh application by invoking the correct method	
 possibles = globals().copy()
