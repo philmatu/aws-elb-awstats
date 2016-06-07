@@ -28,6 +28,7 @@ Acknowledgements:
 
 import sys
 import boto
+import boto.ec2
 from boto.s3.key import Key
 import configparser
 
@@ -65,6 +66,9 @@ DST_AWS_ACCESS_KEY = CONFIG.get('main', 'DST_AWS_ACCESS_KEY')
 DST_AWS_SECRET_KEY = CONFIG.get('main', 'DST_AWS_SECRET_KEY')
 PROCESSING_LOCK_FILE = CONFIG.get('main', 'PROCESSING_LOCK_FILE')
 INSTANCE_NAME_TAG = CONFIG.get('spot', 'INSTANCE_NAME_TAG')
+EC2_REGION = CONFIG.get('spot', 'EC2_REGION')
+EC2_AWS_ACCESS_KEY = CONFIG.get('spot', 'EC2_AWS_ACCESS_KEY')
+EC2_AWS_SECRET_KEY = CONFIG.get('spot', 'EC2_AWS_SECRET_KEY')
 
 #main implementation 
 def releaseLock(filePath):
@@ -98,11 +102,18 @@ def getLocks():
 	dst_s3conn.close()
 	return out
 
+def getInstances():
+	# EC2_AWS_ACCESS_KEY EC2_AWS_SECRET_KEY INSTANCE_NAME_TAG
+	conn = boto.ec2.connect_to_region(EC2_REGION, aws_access_key_id=EC2_AWS_ACCESS_KEY, aws_secret_access_key=EC2_AWS_SECRET_KEY)
+	instances = conn.get_all_instances(filters={"tag:Name" : INSTANCE_NAME_TAG})
+	print (instances)
+
+
 #command implementation 
 
 #TODO: List all instances and locks, note if instance is active, note if instance has a job running
 def do_listall():
-	return "True"
+	print(getInstances())
 
 #TODO: List all instances that are running but have no jobs attached to them
 def do_listorphanedinstances():
