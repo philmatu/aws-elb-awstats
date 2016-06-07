@@ -32,7 +32,11 @@ awstats -update -config=example.com -LogFile="/root/logresolvemerge.pl datafiles
 A sample ElasticLoadBalancer log line looks like:
 2016-05-12T21:48:58.253468Z appelb-pr-ElasticL-3M29U6FNWKZ7 62.114.132.221:32658 10.167.134.188:80 0.000024 0.029101 0.000023 200 200 0 839 "GET http://api.example.com:80/api/data.json?key=nebwh37443&LineRef=8 HTTP/1.1" "Server/1 myLib/17 Server/1 Device/Server" - -
 
+worker.sh needs to be set up on worker nodes that the controller can see on port 80, it should be modified to point to controller node (for job progress)
+on worker image, you can do crontab -e and add "@reboot sh /root/aws-elb-awstats/worker.sh"
+
 IAM Policy:
+Add EC2 Full Access and the following custom policy for s3/sqs
 {
     "Version": "2012-10-17",
     "Statement": [
