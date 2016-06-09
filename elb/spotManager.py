@@ -175,7 +175,7 @@ def getSpotRequests(conn): # connection is connect_to_region of 3c2
 		elif "cancelled" in r.state:
 			if r.instance_id is not None:
 				dns = getDNSFromInstanceID(r.instance_id, conn)
-				if len(dns) < 2:
+				if len(dns) > 2:
 					print("Warning, Cancelled Spot Request \"%s\" has a running instance still, it is \"%s\"" % (r.id, r.instance_id))
 					state_cancelled.append({"spotid":r.id,"instance":r.instance_id})
 			continue
