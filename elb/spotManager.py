@@ -34,6 +34,7 @@ Acknowledgements:
 
 import random
 import sys
+import urllib.request
 import boto
 import boto.ec2
 import boto.vpc
@@ -86,6 +87,7 @@ EC2_INSTANCE_TYPE = CONFIG.get('spot', 'EC2_INSTANCE_TYPE')
 EC2_KEY_PAIR = CONFIG.get('spot', 'EC2_KEY_PAIR')
 EC2_SECURITY_GROUP = CONFIG.get('spot', 'EC2_SECURITY_GROUP')
 EC2_WORKER_AMI = CONFIG.get('spot', 'EC2_WORKER_AMI')
+WORKER_STATUS_FILE_NAME = CONFIG.get('main', 'WORKER_STATUS_FILE_NAME')
 
 #main implementation 
 def releaseLock(filePath):#in format YYYY/MM/DD/
@@ -169,10 +171,15 @@ def getDNSFromInstanceID(instanceid, ec2connection):
 	instance = reservations[0].instances[0]
 	return instance.public_dns_name
 
-#TODO
 def getRunningTaskOnInstance(instanceid, ec2connection):
 	instancedns = getDNSFromInstanceID(instanceid, ec2connection)	
-	return ""
+	url = "http://%s/%s" % (instancedns,WORKER_STATUS_FILE_NAME)
+	resource = urllib.request.urlopen(url)
+	data = resource.read().decode('utf-8').strip()
+	if data.count("/") != 4:
+		if data.count("/") != 0:
+			print("WARNING: There were not 0 nor 4 \"/\"'s in the instance's status file, the instance is %s with web query %s and the data from it was %s" % (instanceid,url,data))
+	return data
 
 def randomword(length):
 	return ''.join(random.choice(string.lowercase) for i in range(length))
@@ -284,7 +291,7 @@ def do_listmismatchedlocks():
 			lockfilepath = parts[0]
 			instanceid = parts[1].strip()
 			if item["instance"] in instanceid:
-				if instanceWorkDir.strip().lower() in lockfilepath.strip().lower():
+				if lockfilepath.strip().lower() in instanceWorkDir.strip().lower():
 					print("INFO: Instance \"%s\" stated work directory matches the lock file on S3")
 				else:
 					print("WARN: Mismatch for instance \"%s\", instance reports lock on \"%s\" but the lock file there reports \"%s\" has the lock" % (item["instance"],instanceWorkDir,instanceid))
