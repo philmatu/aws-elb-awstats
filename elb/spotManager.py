@@ -325,7 +325,7 @@ def do_listduplicates():
 		instanceid = item["instance"]
 		e.setdefault(lockfilepath, set())
 		e[lockfilepath].add(instanceid)
-	print("\n Looking for work directories that are being processed by more than 1 instance simultaneously:")	
+	print("\nLooking for work directories that are being processed by more than 1 instance simultaneously:")	
 	for key in e:
 		if len(key) < 2:
 			for val in e[key]:
