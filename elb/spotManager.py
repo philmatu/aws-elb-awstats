@@ -10,8 +10,9 @@ ListAll - List all instances and locks, note if instance is active, note if inst
 ListOrphanedInstances - List all instances that are running but have no jobs attached to them (if cmd1="delete", listed instances are deleted)
 ListMismatchedLocks - List all locks that mismatch with what the instance says it's doing (Lock.pid != Instance Description URL)
 ListOrphanedLocks - List all locks that don't have an associated instance that is running (if cmd1="delete", listed instances are deleted)
+ListDuplicates - List all locks that concurrently have the same instance, also list all instances that currently have the same work directory
 DeleteLock - Deletes the lock file for a given directory (cmd1=MMDDYYYY as 8 digit integer)
-DeleteInstance - Deletes the instance specified (cmd1=instance id)
+DeleteInstance - Deletes the instance specified (cmd1=spot request id or instance id associated with a spot request)
 CreateInstance - Creates a worker node (spot instance) from a specified image (cmd1 = max bid price, cmd2 = availability zone)
 GetSpotPrice - List all availability zones and the min/max/current spot price for making a decision on what to run
 
@@ -23,6 +24,7 @@ Author: Philip Matuskiewicz - philip.matuskiewicz@nyct.com
 
 Changes:
 	6/6/16 - Initial script
+	6/9/16 - Implementation completed
 
 Acknowledgements:
 	http://stackoverflow.com/questions/7936572/python-call-a-function-from-string-name
@@ -56,7 +58,7 @@ if len(sys.argv) == 3 or len(sys.argv) == 4 or len(sys.argv) == 5 or len(sys.arg
 		c = str(sys.argv[3]).strip().lower()
 		if "delete" in c:
 			CMD1 = True
-		elif "i-" in c:
+		elif c.startswith("i-") or c.startswith("sir-"):
 			CMD1 = c #will be an AWS instance ID to delete
 		elif c.replace(".","").isdigit():
 			CMD1 = float(str(sys.argv[3]).strip())
@@ -86,7 +88,7 @@ EC2_SECURITY_GROUP = CONFIG.get('spot', 'EC2_SECURITY_GROUP')
 EC2_WORKER_AMI = CONFIG.get('spot', 'EC2_WORKER_AMI')
 
 #main implementation 
-def releaseLock(filePath):
+def releaseLock(filePath):#in format YYYY/MM/DD/
 	dst_s3conn = boto.connect_s3(DST_AWS_ACCESS_KEY, DST_AWS_SECRET_KEY)
 	dst_bucket = dst_s3conn.get_bucket(DST_PATH[:DST_PATH.index('/')])
 	lock_file_path = "%s%s%s" % (DST_PATH[DST_PATH.index('/'):],filePath,PROCESSING_LOCK_FILE)
@@ -109,18 +111,32 @@ def getLocks():
 			monthint = month.name[-3:-1]
 			for day in bucket.list(prefix=month.name, delimiter='/'):
 				dayint = day.name[-3:-1]
-				dstdir = "%s%s%s" % (monthint, dayint, yearint)
+				dstdir = "%s/%s/%s/" % (monthint, dayint, yearint)
 				for filePath in bucket.list(prefix=day.name, delimiter='/'):
 					if PROCESSING_LOCK_FILE in filePath.name:
 						instance = bytes(filePath.get_contents_as_string()).decode(encoding='UTF-8')
-						out.append("%s~%s" % (filePath.name, instance))
+						if instance.count("i-") > 1:
+							print("WARNING: file \"%s\" has more than 1 instance (i-) in it, you need to correct this manually! Contents: \"%s\"" % (filePath.name,instance))
+						elif instance.count("i-")  == 1:
+							out.append("%s~%s" % (dstdir, instance))
+						else:
+							print("WARNING: Empty lock file detected in dir \"%s\"... you might want to delete this!" % filePath.name)
+							out.append("%s~%s" % (dstdir, instance))
+							
 	dst_s3conn.close()
 	return out
 
 #we dont need to cancel instances, only spot requests associated with the instance
-def cancelSpotRequest(spotobject):
+def cancelSpotRequest(conn,spotobject):
 	if "sir-" in spotobject["spotid"]:
 		print ("Canceling %s " % spotobject["spotid"])
+		ids = list()
+		ids.append(spotobject["spotid"])
+		res = conn.cancel_spot_instance_requests(ids)
+		print("Result: %s" % res)
+	else:
+		print("%s is not a valid spot instance containing object" % spotobject)
+
 
 def getSpotRequests(conn): # connection is connect_to_region of 3c2
 	#using EC2_WORKER_AMI, get all running spot requests and any running instances with them
@@ -147,6 +163,16 @@ def getSpotRequests(conn): # connection is connect_to_region of 3c2
 			continue
 	return {"open":state_open, "active": state_active}
 
+#pass in the instance id to get the IP address of the instance
+def getDNSFromInstanceID(instanceid, ec2connection):
+	reservations = ec2connection.get_all_reservations(filters={'instance-id' : instanceid})
+	instance = reservations[0].instances[0]
+	return instance.public_dns_name
+
+#TODO
+def getRunningTaskOnInstance(instanceid, ec2connection):
+	instancedns = getDNSFromInstanceID(instanceid, ec2connection)	
+	return ""
 
 def randomword(length):
 	return ''.join(random.choice(string.lowercase) for i in range(length))
@@ -210,35 +236,116 @@ def do_createinstance():
 	print("Request success: %s" % succ)
 	conn.close()
 
-	
-
-#TODO: List all instances and locks, note if instance is active, note if instance has a job running
+#List all instances and locks, note if instance is active, note if instance has a job running
 def do_listall():
 	conn = boto.ec2.connect_to_region(EC2_REGION, aws_access_key_id=EC2_AWS_ACCESS_KEY, aws_secret_access_key=EC2_AWS_SECRET_KEY)
 	reqs = getSpotRequests(conn)
-	print(reqs)
-	
-	conn.close()
-
-#TODO: List all instances that are running but have no jobs attached to them
-def do_listorphanedinstances():
-	return "True"
-
-#TODO List all locks that mismatch with what the instance says it's doing
-def do_listmismatchedlocks():
-	return "True"
-
-#TODO List all locks that don't have an associated instance that is running
-def do_listorphanedlocks():
-	locks = getLocks()
-	for lock in locks:
+	print("Unfulfilled Spot Requests")
+	for item in reqs["open"]:
+		print("-- SpotID: \"%s\"" % item["spotid"])
+	print("\nRunning Spot Requests")
+	for item in reqs["active"]:
+		instanceIP = getDNSFromInstanceID(item["instance"], conn)
+		instanceWorkDir = getRunningTaskOnInstance(item["instance"], conn)
+		print("-- SpotID: \"%s\" InstanceID: \"%s\" WorkingOn (based on instance data): \"%s\" InstanceDNSName: \"%s\"" % (item["spotid"],item["instance"],instanceWorkDir,instanceIP))
+	print("\nList of locks with instance ids (based on S3 directory search)")
+	for lock in getLocks():
 		parts = lock.split("~")
 		lockfilepath = parts[0]
 		instanceid = parts[1]
-		if CMD1:
-			print("Not implemented, delete requested")	
+		print("--Directory \"%s\" claimed by instance \"%s\"" % (lockfilepath,instanceid))
+	conn.close()
 
-#TODO only allow lock delete if it is not associated with a running instance, otherwise make force option
+#List all instances that are running but have no jobs attached to them
+def do_listorphanedinstances():
+	conn = boto.ec2.connect_to_region(EC2_REGION, aws_access_key_id=EC2_AWS_ACCESS_KEY, aws_secret_access_key=EC2_AWS_SECRET_KEY)
+	reqs = getSpotRequests(conn)
+	print("Orphaned (Not working on anything) Active Spot Instances:")
+	for item in reqs["active"]:
+		instanceWorkDir = getRunningTaskOnInstance(item["instance"], conn)
+		if len(instanceWorkDir) > 1:
+			instanceIP = getDNSFromInstanceID(item["instance"], conn)
+			if CMD1:
+				cancelSpotRequest(conn, item)
+			else:
+				print("-- SpotID: \"%s\" InstanceID: \"%s\" InstanceDNSNAME: \"%s\"" % (item["spotid"],item["instance"],instanceIP))
+	conn.close()
+
+#List all locks that mismatch with what the instance says it's doing
+def do_listmismatchedlocks():
+	locks = getLocks()
+	conn = boto.ec2.connect_to_region(EC2_REGION, aws_access_key_id=EC2_AWS_ACCESS_KEY, aws_secret_access_key=EC2_AWS_SECRET_KEY)
+	reqs = getSpotRequests(conn)
+
+	for item in reqs["active"]:
+		instanceWorkDir = getRunningTaskOnInstance(item["instance"], conn)
+		for lock in locks:
+			parts = lock.split("~")
+			lockfilepath = parts[0]
+			instanceid = parts[1].strip()
+			if item["instance"] in instanceid:
+				if instanceWorkDir.strip().lower() in lockfilepath.strip().lower():
+					print("INFO: Instance \"%s\" stated work directory matches the lock file on S3")
+				else:
+					print("WARN: Mismatch for instance \"%s\", instance reports lock on \"%s\" but the lock file there reports \"%s\" has the lock" % (item["instance"],instanceWorkDir,instanceid))
+	
+	conn.close()
+
+def do_listduplicates():
+	locks = getLocks()
+	
+	d = {}
+	for lock in locks:
+		parts = lock.split("~")
+		instanceid = parts[1].strip()
+		lockfilepath = parts[0]
+		d.setdefault(instanceid, set())
+		d[instanceid].add(lockfilepath)
+	print("\nLooking for duplicate directories listed:")	
+	for key in d:
+		if len(key) < 2:
+			for val in d[key]:
+				print("\t--WARNING: Empty Lock File (no instances listed) in directory(s) \"%s\"" % val)
+		else:
+			if len(d[key]) > 1:
+				print("\t--WARNING: Duplicate instance \"%s\" found in directories \"%s\"" % (key, d[key]))
+
+	conn = boto.ec2.connect_to_region(EC2_REGION, aws_access_key_id=EC2_AWS_ACCESS_KEY, aws_secret_access_key=EC2_AWS_SECRET_KEY)
+	reqs = getSpotRequests(conn)
+	e = {}
+	for item in reqs["active"]:
+		lockfilepath = getRunningTaskOnInstance(item["instance"], conn)
+		instanceid = item["instance"]
+		e.setdefault(lockfilepath, set())
+		e[lockfilepath].add(instanceid)
+	print("\n Looking for work directories that are being processed by more than 1 instance simultaneously:")	
+	for key in e:
+		if len(key) < 2:
+			for val in e[key]:
+				print("\t--WARNING: Empty Status File (not doing any work) on instance \"%s\"" % val)
+		else:
+			if len(e[key]) > 1:
+				print("\t--WARNING: Duplicate workdirectory \"%s\" found on instances \"%s\"" % (key, e[key]))
+	conn.close()
+
+#List all locks that don't have an associated instance that is running
+def do_listorphanedlocks():
+	locks = getLocks()
+	conn = boto.ec2.connect_to_region(EC2_REGION, aws_access_key_id=EC2_AWS_ACCESS_KEY, aws_secret_access_key=EC2_AWS_SECRET_KEY)
+	reqs = getSpotRequests(conn)
+	for item in reqs["active"]:
+		instanceid = item["instance"]
+		if instanceid.strip() not in locks:
+			parts = lock.split("~")
+			lockfilepath = parts[0]
+			instanceidlockfile = parts[1]
+			if CMD1:
+				print("INFO: Lock on directory \"%s\" didn't have a running, matching instance, deleting the lock now" % lockfilepath)
+				releaseLock(lockfilepath)
+			else:
+				print("INFO: Lock on directory \"%s\" doesn't have an associated instance running, maybe it was prematurely killed?  Try deleting this and requeuing?" % lockfilepath)
+
+#NOTE: might be a good idea to only allow lock delete if it is not associated with a running instance, otherwise make force option
 def do_deletelock():
 	if CMD1.isdigit():
 		#MMDDYYYY
@@ -248,9 +355,14 @@ def do_deletelock():
 		releaselockdir = "%s/%s/%s/" % (y,m,d)
 		releaseLock(releaselockdir)
 
-#TODO delete the instance listed
 def do_deleteinstance():
-	return "True"
+	conn = boto.ec2.connect_to_region(EC2_REGION, aws_access_key_id=EC2_AWS_ACCESS_KEY, aws_secret_access_key=EC2_AWS_SECRET_KEY)
+	reqs = getSpotRequests(conn)
+	for state in reqs:
+		for item in reqs[state]:
+			if CMD1.strip().lower() in str(item):
+				cancelSpotRequest(conn,item)
+	conn.close()
 
 # run teh application by invoking the correct method	
 possibles = globals().copy()
