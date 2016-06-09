@@ -17,6 +17,7 @@ Changes:
 	6/2/16 - Finalized Script
 	6/3/16 - added signal killing abilities, not tested yet in this commit #TODO
 	6/6/16 - Added timezone conversion and many bugfixes
+	6/9/16 - Added web directory updates
 '''
 
 import sys
@@ -82,6 +83,8 @@ INCOMPLETE_TASKS_QUEUE_NAME = CONFIG.get('main', 'INCOMPLETE_TASKS_QUEUE_NAME')
 QUEUE_AWS_ACCESS_KEY = CONFIG.get('main', 'QUEUE_AWS_ACCESS_KEY')
 QUEUE_AWS_SECRET_KEY = CONFIG.get('main', 'QUEUE_AWS_SECRET_KEY')
 AWS_SPOT_CHECK_SLEEP_INTERVAL_SECONDS = int(CONFIG.get('main', 'AWS_SPOT_CHECK_SLEEP_INTERVAL_SECONDS'))
+WORKER_WEB_ROOT = CONFIG.get('main', 'WORKER_WEB_ROOT')
+WORKER_STATUS_FILE_NAME = CONFIG.get('main', 'WORKER_STATUS_FILE_NAME')
 #this script does not process anything from the current day due to added logic to keep track of hourly file dumps
 
 #compiled regex for threading, these compiled bits are thread safe
@@ -109,6 +112,13 @@ def handle_SIGINT_MAIN(signum, frame):
 	
 	os.system('kill $PPID')
 
+def setLocalWebStatusFileText(data):
+	#creates the file if it doesn't exist, updates it otherwise
+	path = "%s%s" % (WORKER_WEB_ROOT,WORKER_STATUS_FILE_NAME) 
+	with open(path, "w") as text_file:
+		text_file.write(data)
+	print("Wrote out the data \"%s\" to local web status file at \"%s\"" % (data,path))
+
 def createLock(filePath):
 	dst_s3conn = boto.connect_s3(DST_AWS_ACCESS_KEY, DST_AWS_SECRET_KEY)
 	dst_bucket = dst_s3conn.get_bucket(DST_PATH[:DST_PATH.index('/')])
@@ -118,6 +128,7 @@ def createLock(filePath):
 		resource = urllib.request.urlopen(AWS_META_INSTANCEID_URL)
 		instanceid = resource.read().decode('utf-8')
 		lock_file_key.set_contents_from_string(instanceid)
+		setLocalWebStatusFileText(filePath)
 		print("The lock is now acquired to begin processing on %s" % lock_file_path)
 		dst_s3conn.close()
 		return True
@@ -128,12 +139,14 @@ def createLock(filePath):
 	return False
 
 def releaseLock(filePath):
+	setLocalWebStatusFileText("")
 	dst_s3conn = boto.connect_s3(DST_AWS_ACCESS_KEY, DST_AWS_SECRET_KEY)
 	dst_bucket = dst_s3conn.get_bucket(DST_PATH[:DST_PATH.index('/')])
 	lock_file_path = "%s%s%s" % (DST_PATH[DST_PATH.index('/'):],filePath,PROCESSING_LOCK_FILE)
 	lock_file_key = Key(dst_bucket, lock_file_path)
 	if not lock_file_key.exists():
 		print("There was no lock... hoping nothing went wrong!  You may want to verify this.")
+		dst_s3conn.close()
 		return False
 	else:
 		instanceid = bytes(lock_file_key.get_contents_as_string()).decode(encoding='UTF-8')
@@ -143,9 +156,9 @@ def releaseLock(filePath):
 			print("WARNING: the instance id's don't match, mine is %s, the lock one is %s" %(myinstanceid,instanceid))
 		dst_bucket.delete_key(lock_file_key)
 		print("The lock file has been removed, releasing for future processing")
-	dst_s3conn.close()
-	return False
-
+		dst_s3conn.close()
+		return True
+	return False #shouldn't get here
 def directoryAlreadyCompleted(path):
 	dst_s3conn = boto.connect_s3(DST_AWS_ACCESS_KEY, DST_AWS_SECRET_KEY)
 	dst_bucket = dst_s3conn.get_bucket(DST_PATH[:DST_PATH.index('/')])
