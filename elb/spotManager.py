@@ -179,7 +179,13 @@ def getDNSFromInstanceID(instanceid, ec2connection):
 def getRunningTaskOnInstance(instanceid, ec2connection):
 	instancedns = getDNSFromInstanceID(instanceid, ec2connection)	
 	url = "http://%s/%s" % (instancedns,WORKER_STATUS_FILE_NAME)
-	resource = urllib.request.urlopen(url)
+	try:
+		resource = urllib.request.urlopen(url)
+	except urllib.error.HTTPError as e:
+		print("The URL wasn't found (404) on instance \"%s\" via url \"%s\"" % (instanceid,url))
+		return ""
+	except urllib.error.URLError as e:
+		print("The instance \"%s\" had another error or some type, url was \"%s\"" % (instanceid,url))
 	data = resource.read().decode('utf-8').strip()
 	if data.count("/") != 4:
 		if data.count("/") != 0:
@@ -275,12 +281,11 @@ def do_listorphanedinstances():
 	print("Orphaned (Not working on anything) Active Spot Instances:")
 	for item in reqs["active"]:
 		instanceWorkDir = getRunningTaskOnInstance(item["instance"], conn)
-		if len(instanceWorkDir) > 1:
-			instanceIP = getDNSFromInstanceID(item["instance"], conn)
-			if CMD1:
-				cancelSpotRequest(conn, item)
-			else:
-				print("-- SpotID: \"%s\" InstanceID: \"%s\" InstanceDNSNAME: \"%s\"" % (item["spotid"],item["instance"],instanceIP))
+		instanceIP = getDNSFromInstanceID(item["instance"], conn)
+		if CMD1:
+			cancelSpotRequest(conn, item)
+		else:
+			print("-- SpotID: \"%s\" InstanceID: \"%s\" InstanceDNSNAME: \"%s\"" % (item["spotid"],item["instance"],instanceIP))
 	conn.close()
 
 #List all locks that mismatch with what the instance says it's doing
