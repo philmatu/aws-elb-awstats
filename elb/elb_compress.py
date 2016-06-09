@@ -15,7 +15,7 @@ Changes:
 	5/30/16 - Incorporated SQS for spot instance use, not ready to use yet
 	5/31/16 - Added compression support / upload to s3 support / lock/status file updates (for parts)
 	6/2/16 - Finalized Script
-	6/3/16 - added signal killing abilities, not tested yet in this commit #TODO
+	6/3/16 - added signal killing abilities
 	6/6/16 - Added timezone conversion and many bugfixes
 	6/9/16 - Added web directory updates
 '''
@@ -419,7 +419,7 @@ def checkForTerminationThread():
 			the_termination_time = resource.read().decode('utf-8')
 			print("The spot instance will terminate at %s... starting shutdown" % the_termination_time)
 			os.system('kill $PPID')
-			#TODO look into terminating instance here
+			os.system('shutdown -h now')
 		time.sleep(AWS_SPOT_CHECK_SLEEP_INTERVAL_SECONDS)
 
 #start main thread
