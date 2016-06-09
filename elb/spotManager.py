@@ -18,6 +18,11 @@ GetSpotPrice - List all availability zones and the min/max/current spot price fo
 
 This application manages spot instances and management of log processing through log files and worker http requests
 
+Helpful URLS:
+Spot Bid Advisor: https://aws.amazon.com/ec2/spot/bid-advisor/
+Spot Bid Pricing: https://aws.amazon.com/ec2/spot/pricing/
+On Demand Pricing: https://aws.amazon.com/ec2/pricing/
+
 ***
 
 Author: Philip Matuskiewicz - philip.matuskiewicz@nyct.com       
