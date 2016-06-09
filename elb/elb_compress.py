@@ -43,6 +43,7 @@ import urllib.request
 import configparser
 import gzip
 
+SPOT_KILL = False
 WRITE_LOCK = threading.Lock()
 CONFIG = configparser.ConfigParser()
 DATE_TO_PROCESS = False
@@ -109,7 +110,8 @@ def handle_SIGINT_MAIN(signum, frame):
 		print("Caught the kill signal from ctrl c, Publishing directory \"%s\" to incomplete queue (unless manual mode)" % DIRECTORY)
 		enQueueNonCompletedDirectory(DIRECTORY)
 		releaseLock(DIRECTORY)
-	
+	if SPOT_KILL:
+		os.system('shutdown -h now')
 	os.system('kill $PPID')
 
 def setLocalWebStatusFileText(data):
@@ -418,8 +420,8 @@ def checkForTerminationThread():
 		else:
 			the_termination_time = resource.read().decode('utf-8')
 			print("The spot instance will terminate at %s... starting shutdown" % the_termination_time)
+			SPOT_KILL = True
 			os.system('kill $PPID')
-			os.system('shutdown -h now')
 		time.sleep(AWS_SPOT_CHECK_SLEEP_INTERVAL_SECONDS)
 
 #start main thread
