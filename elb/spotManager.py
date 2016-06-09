@@ -140,16 +140,22 @@ def cancelSpotRequest(conn,spotobject):
 		ids = list()
 		ids.append(spotobject["spotid"])
 		res = conn.cancel_spot_instance_requests(ids)
-		print("Result: %s" % res)
+		print("Result for spot instance request cancellation: %s" % res)
 	else:
 		print("%s is not a valid spot instance containing object" % spotobject)
-
+	if "instance" in spotobject:
+		if "i-" in spotobject["instance"]:
+			ids = list()
+			ids.append(spotobject["instance"])
+			res = conn.terminate_instances(ids)
+			print("Instance %s was terminated"%(spotobject["instance"]))
 
 def getSpotRequests(conn): # connection is connect_to_region of 3c2
 	#using EC2_WORKER_AMI, get all running spot requests and any running instances with them
 	req = conn.get_all_spot_instance_requests()
 	state_open = list()
 	state_active = list()
+	state_cancelled = list()
 	for r in req:
 		if r.launch_specification is not None:
 			if EC2_WORKER_AMI.lower().strip() not in str(r.launch_specification).lower():
@@ -166,30 +172,43 @@ def getSpotRequests(conn): # connection is connect_to_region of 3c2
 		elif "closed" in r.state:
 			print("The spot request %s was closed... you should cancel it" % r.id)
 			continue
+		elif "cancelled" in r.state:
+			if r.instance_id is not None:
+				dns = getDNSFromInstanceID(r.instance_id, conn)
+				if len(dns) < 2:
+					print("Warning, Cancelled Spot Request \"%s\" has a running instance still, it is \"%s\"" % (r.id, r.instance_id))
+					state_cancelled.append({"spotid":r.id,"instance":r.instance_id})
+			continue
 		else:
 			continue
-	return {"open":state_open, "active": state_active}
+	return {"open":state_open, "active": state_active, "cancelled": state_cancelled}
 
 #pass in the instance id to get the IP address of the instance
 def getDNSFromInstanceID(instanceid, ec2connection):
 	reservations = ec2connection.get_all_reservations(filters={'instance-id' : instanceid})
 	instance = reservations[0].instances[0]
-	return instance.public_dns_name
+	if "running" in instance.state:
+		return instance.public_dns_name
+	return ""
 
 def getRunningTaskOnInstance(instanceid, ec2connection):
 	instancedns = getDNSFromInstanceID(instanceid, ec2connection)	
+	if len(instancedns) < 2:
+		#no dns means the instance isn't running
+		return ""
 	url = "http://%s/%s" % (instancedns,WORKER_STATUS_FILE_NAME)
 	try:
 		resource = urllib.request.urlopen(url)
 	except urllib.error.HTTPError as e:
-		print("The URL wasn't found (404) on instance \"%s\" via url \"%s\"" % (instanceid,url))
+		print("WARN: The URL wasn't found (404) on instance \"%s\" via url \"%s\", this instance is likely defunct" % (instanceid,url))
 		return ""
 	except urllib.error.URLError as e:
-		print("The instance \"%s\" had another error or some type, url was \"%s\"" % (instanceid,url))
+		print("WARN: The instance \"%s\" had another error or some type, url was \"%s\", this instance is likely defunct" % (instanceid,url))
+		return ""
 	data = resource.read().decode('utf-8').strip()
 	if data.count("/") != 4:
 		if data.count("/") != 0:
-			print("WARNING: There were not 0 nor 4 \"/\"'s in the instance's status file, the instance is %s with web query %s and the data from it was %s" % (instanceid,url,data))
+			print("\tWARNING: There were not 0 nor 4 \"/\"'s in the instance's status file, the instance is %s with web query %s and the data from it was %s" % (instanceid,url,data))
 	return data
 
 def randomword(length):
@@ -258,35 +277,59 @@ def do_createinstance():
 def do_listall():
 	conn = boto.ec2.connect_to_region(EC2_REGION, aws_access_key_id=EC2_AWS_ACCESS_KEY, aws_secret_access_key=EC2_AWS_SECRET_KEY)
 	reqs = getSpotRequests(conn)
-	print("Unfulfilled Spot Requests")
+	out = list()
+	out.append("Unfulfilled Spot Requests")
 	for item in reqs["open"]:
-		print("-- SpotID: \"%s\"" % item["spotid"])
-	print("\nRunning Spot Requests")
+		out.append("-- SpotID: \"%s\"" % item["spotid"])
+	out.append("\nRunning Spot Requests")
 	for item in reqs["active"]:
 		instanceIP = getDNSFromInstanceID(item["instance"], conn)
 		instanceWorkDir = getRunningTaskOnInstance(item["instance"], conn)
-		print("-- SpotID: \"%s\" InstanceID: \"%s\" WorkingOn (based on instance data): \"%s\" InstanceDNSName: \"%s\"" % (item["spotid"],item["instance"],instanceWorkDir,instanceIP))
-	print("\nList of locks with instance ids (based on S3 directory search)")
+		out.append("-- SpotID: \"%s\" InstanceID: \"%s\" WorkingOn (based on instance data): \"%s\" InstanceDNSName: \"%s\"" % (item["spotid"],item["instance"],instanceWorkDir,instanceIP))
+	out.append("\nCanceled Spot Requests with running instances, you should probably cancel these (this is likely a manual execution)!")
+	for item in reqs["cancelled"]:
+		instanceIP = getDNSFromInstanceID(item["instance"], conn)
+		if len(instanceIP) < 2:
+			out.append("-- SpotID: \"%s\" InstanceID: \"%s\" is already shut down / canceled" % (item["spotid"],item["instance"]))
+			continue
+		instanceWorkDir = getRunningTaskOnInstance(item["instance"], conn)
+		out.append("-- SpotID: \"%s\" InstanceID: \"%s\" WorkingOn (based on instance data): \"%s\" InstanceDNSName: \"%s\"" % (item["spotid"],item["instance"],instanceWorkDir,instanceIP))
+	out.append("\nList of locks with instance ids (based on S3 directory search)")
 	for lock in getLocks():
 		parts = lock.split("~")
 		lockfilepath = parts[0]
 		instanceid = parts[1]
-		print("--Directory \"%s\" claimed by instance \"%s\"" % (lockfilepath,instanceid))
+		out.append("--Directory \"%s\" claimed by instance \"%s\"" % (lockfilepath,instanceid))
 	conn.close()
+	print("")
+	for line in out:
+		print(line)
 
 #List all instances that are running but have no jobs attached to them
 def do_listorphanedinstances():
+	out = list()
 	conn = boto.ec2.connect_to_region(EC2_REGION, aws_access_key_id=EC2_AWS_ACCESS_KEY, aws_secret_access_key=EC2_AWS_SECRET_KEY)
 	reqs = getSpotRequests(conn)
-	print("Orphaned (Not working on anything) Active Spot Instances:")
+	out.append("Orphaned (Not working on anything) Active Spot Instances:")
 	for item in reqs["active"]:
 		instanceWorkDir = getRunningTaskOnInstance(item["instance"], conn)
 		instanceIP = getDNSFromInstanceID(item["instance"], conn)
 		if CMD1:
 			cancelSpotRequest(conn, item)
 		else:
-			print("-- SpotID: \"%s\" InstanceID: \"%s\" InstanceDNSNAME: \"%s\"" % (item["spotid"],item["instance"],instanceIP))
+			out.append("-- SpotID: \"%s\" InstanceID: \"%s\" InstanceDNSNAME: \"%s\"" % (item["spotid"],item["instance"],instanceIP))
+	out.append("\nCanceled Spot Requests with running instances, you should probably cancel these (this is likely a manual execution)!")
+	for item in reqs["cancelled"]:
+		instanceIP = getDNSFromInstanceID(item["instance"], conn)
+		instanceWorkDir = getRunningTaskOnInstance(item["instance"], conn)
+		if CMD1:
+			cancelSpotRequest(conn, item)
+		else:
+			out.append("-- SpotID: \"%s\" InstanceID: \"%s\" WorkingOn (based on instance data): \"%s\" InstanceDNSName: \"%s\"" % (item["spotid"],item["instance"],instanceWorkDir,instanceIP))
 	conn.close()
+	print("")
+	for line in out:
+		print(line)
 
 #List all locks that mismatch with what the instance says it's doing
 def do_listmismatchedlocks():
@@ -309,6 +352,8 @@ def do_listmismatchedlocks():
 	conn.close()
 
 def do_listduplicates():
+	out = list()
+
 	locks = getLocks()
 	
 	d = {}
@@ -318,14 +363,14 @@ def do_listduplicates():
 		lockfilepath = parts[0]
 		d.setdefault(instanceid, set())
 		d[instanceid].add(lockfilepath)
-	print("\nLooking for duplicate directories listed:")	
+	out.append("\nLooking for duplicate directories listed:")	
 	for key in d:
 		if len(key) < 2:
 			for val in d[key]:
-				print("\t--WARNING: Empty Lock File (no instances listed) in directory(s) \"%s\"" % val)
+				out.append("\t--WARNING: Empty Lock File (no instances listed) in directory(s) \"%s\"" % val)
 		else:
 			if len(d[key]) > 1:
-				print("\t--WARNING: Duplicate instance \"%s\" found in directories \"%s\"" % (key, d[key]))
+				out.append("\t--WARNING: Duplicate instance \"%s\" found in directories \"%s\"" % (key, d[key]))
 
 	conn = boto.ec2.connect_to_region(EC2_REGION, aws_access_key_id=EC2_AWS_ACCESS_KEY, aws_secret_access_key=EC2_AWS_SECRET_KEY)
 	reqs = getSpotRequests(conn)
@@ -335,15 +380,18 @@ def do_listduplicates():
 		instanceid = item["instance"]
 		e.setdefault(lockfilepath, set())
 		e[lockfilepath].add(instanceid)
-	print("\nLooking for work directories that are being processed by more than 1 instance simultaneously:")	
+	out.append("\nLooking for work directories that are being processed by more than 1 instance simultaneously:")	
 	for key in e:
 		if len(key) < 2:
 			for val in e[key]:
-				print("\t--WARNING: Empty Status File (not doing any work) on instance \"%s\"" % val)
+				out.append("\t--WARNING: Empty Status File (not doing any work) on instance \"%s\"" % val)
 		else:
 			if len(e[key]) > 1:
-				print("\t--WARNING: Duplicate workdirectory \"%s\" found on instances \"%s\"" % (key, e[key]))
+				out.append("\t--WARNING: Duplicate workdirectory \"%s\" found on instances \"%s\"" % (key, e[key]))
 	conn.close()
+	print("")
+	for line in out:
+		print(line)
 
 #List all locks that don't have an associated instance that is running
 def do_listorphanedlocks():
