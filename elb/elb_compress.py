@@ -455,6 +455,7 @@ if DATE_TO_PROCESS is not False:
 						manual_dirlist.append(fname)
 	s3conn.close()
 
+setLocalWebStatusFileText("")
 #queue processing mode (if a date isn't set)
 while True:
 	if (len(manual_dirlist) > 0) and (matchdir is not False):
@@ -466,12 +467,8 @@ while True:
 		count = 0
 		message = readQueue()
 		if message is None:
-			count = count + 1
-			if count > 5:
-				print("There were no messages in the queue, no need to remain operational.  Quitting.")
-				sys.exit(0)
-			print("No data in queue, waiting 5 seconds and trying again")
-			time.sleep(5) #5 second sleep, 25 second total wait from queue before we consider all tasks done for the day		
+			print("No data in queue, waiting 30 seconds and trying again")
+			time.sleep(30) #5 second sleep, 25 second total wait from queue before we consider all tasks done for the day		
 			continue
 		count = 0
 		data = json.loads(message)
