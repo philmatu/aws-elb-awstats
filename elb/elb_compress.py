@@ -489,6 +489,7 @@ while True:
 		releaseLock(DIRECTORY)
 	else:
 		print("Exiting without doing work, couldn't acquire a lock for processing the date associated with %s." % tasks[0]);
+	DIRECTORY = ""
 	if (len(manual_dirlist) > 0) and (matchdir is not False):
 		print("Manual Directory \"%s\" has been processed, exiting now." % matchdir)
 		os.system('kill $PPID')
