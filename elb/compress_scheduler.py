@@ -49,7 +49,7 @@ if len(sys.argv) == 2 or len(sys.argv) == 3:
 			print("The date to handle you entered is not in MMDDYYYY (8 integers), please try again.  You entered %s" % DATE_TO_PROCESS)
 			sys.exit(0)
 else:
-        print ("usage: ./compress_scheduler.py <configfile> [<date_to_handle_in_MMDDYYYY>]")
+	print ("usage: ./compress_scheduler.py <configfile> [<date_to_handle_in_MMDDYYYY>]")
 	sys.exit(0)
 
 #Load configuration from ini file
