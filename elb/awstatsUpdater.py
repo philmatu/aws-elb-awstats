@@ -136,9 +136,11 @@ if os.path.exists(AWSTATS_LAST_ADDED_FILE):
 
 sd = False
 MONTH_ONLY = False
+SAME_DAY = False
 if (START_MONTH is not False) and (START_PROCESS is False):
 	#handle commands only if START_PROCESS IS FALSE (nothing has been done)
 	if START_DAY is not False:
+		SAME_DAY = True
 		sd = "%s%s" % (START_MONTH,START_DAY)
 		print("Handling command parameters for date, entry in YYYYMM DD is \"%s %s\", starting here"%(START_MONTH,START_DAY))
 	else:
@@ -220,7 +222,7 @@ for year in bucket.list(prefix=DST_PATH[DST_PATH.index('/')+1:], delimiter='/'):
 				work[procdate] = items
 			
 			#if there is a start date specified somewhere, make sure to adhere to it -> now
-			if MONTH_ONLY:
+			if MONTH_ONLY or SAME_DAY:
 				if startdate <= procdate <= enddate:
 					work[procdate] = items
 			else:
