@@ -201,12 +201,15 @@ def getRunningTaskOnInstance(instanceid, ec2connection):
 		return ""
 	url = "http://%s/%s" % (instancedns,WORKER_STATUS_FILE_NAME)
 	try:
-		resource = urllib.request.urlopen(url)
+		resource = urllib.request.urlopen(url, timeout=5)
 	except urllib.error.HTTPError as e:
 		print("WARN: The URL wasn't found (404) on instance \"%s\" via url \"%s\", this instance is likely defunct" % (instanceid,url))
 		return ""
 	except urllib.error.URLError as e:
 		print("WARN: The instance \"%s\" had another error or some type, url was \"%s\", this instance is likely defunct" % (instanceid,url))
+		return ""
+	except timeout:
+		print("WARN: The instance \"%s\" timed out... did it start yet?  Url: \"%s\"" % (instanceid,url))
 		return ""
 	data = resource.read().decode('utf-8').strip()
 	if data.count("/") != 4:
