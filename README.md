@@ -3,6 +3,7 @@ Author: Philip Matuskiewicz
 Date: 5/24/2016
 
 Acknowledgements:
+http://boto.cloudhackers.com/en/latest/ref/index.html #api documentation, especially S3, SQS, VPC and EC2
 https://github.com/rohit01/awstats_for_elb/tree/master/roles/awstats
 http://serverfault.com/questions/625088/awstats-logformat-for-aws-elastic-load-balancer
 
