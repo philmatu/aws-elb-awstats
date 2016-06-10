@@ -42,14 +42,14 @@ def readIncompleteQueue():
 		print("Checked the incomplete queue %s, nothing was there")
 		return list()
 	out = set()#ensures unique values
-	messages = logProcQueue.get_messages(wait_time_seconds=2, num_messages=10)
+	messages = logProcQueue.get_messages(visibility_timeout=30, wait_time_seconds=2, num_messages=10)
 	while len(messages) > 0:
 		for message in messages:
 			raw_json = message.get_body()
 			data = json.loads(raw_json)
 			if len(data['directory']) > 0:
 				out.add(data['directory'][:-1])#remove final / which is in directory
-		messages = logProcQueue.get_messages(wait_time_seconds=2, num_messages=10)#continue reading
+		messages = logProcQueue.get_messages(visibility_timeout=30, wait_time_seconds=2, num_messages=10)#continue reading
 	qconn.close()
 	return out
 
