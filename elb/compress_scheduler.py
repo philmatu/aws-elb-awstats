@@ -205,7 +205,7 @@ def readIncompleteQueue(deleteAfterRead=True):
 		print("Checked the incomplete queue %s, nothing was there, so we'll continue with scheduling as normal")
 		return list()
 	out = set()#ensures unique values
-	messages = logProcQueue.get_messages(wait_time_seconds=2, num_messages=10)
+	messages = logProcQueue.get_messages(visibility_timeout=10,wait_time_seconds=2, num_messages=10)
 	while len(messages) > 0:
 		for message in messages:
 			raw_json = message.get_body()
@@ -214,7 +214,7 @@ def readIncompleteQueue(deleteAfterRead=True):
 				out.add(data['directory'][:-1])#remove final / which is in directory
 			if deleteAfterRead:
 				logProcQueue.delete_message(message)
-		messages = logProcQueue.get_messages(wait_time_seconds=2, num_messages=10)#continue reading
+		messages = logProcQueue.get_messages(visibility_timeout=10,wait_time_seconds=2, num_messages=10)#continue reading
 	qconn.close()
 	return out
 
@@ -244,7 +244,7 @@ if DATE_TO_PROCESS is not False:
 	matchdir = "%s/%s/%s" % (sy,sm,sd)
 
 INCOMPLETE_LIST = list()
-if endmatchdir is False and matchdir is True:
+if endmatchdir is False and matchdir is not False:
 	#if we're running a match directory operation, we shouldn't look at incomplete items
 	INCOMPLETE_LIST = readIncompleteQueue(deleteAfterRead=False)
 else:
