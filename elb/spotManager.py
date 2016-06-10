@@ -117,6 +117,10 @@ def getLocks():
 		for month in bucket.list(prefix=year.name, delimiter='/'):
 			monthint = month.name[-3:-1]
 			for day in bucket.list(prefix=month.name, delimiter='/'):
+				digitsum = sum(c.isdigit() for c in day.name)
+				if digitsum != 8:
+					#first directory... no files in it
+					continue
 				dayint = day.name[-3:-1]
 				dstdir = "%s/%s/%s/" % (monthint, dayint, yearint)
 				for filePath in bucket.list(prefix=day.name, delimiter='/'):

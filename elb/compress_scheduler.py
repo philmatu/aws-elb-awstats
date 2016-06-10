@@ -262,6 +262,10 @@ for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'):
 	for month in bucket.list(prefix=year.name, delimiter='/'):
 		monthint = month.name[-3:-1]
 		for day in bucket.list(prefix=month.name, delimiter='/'):
+			digitsum = sum(c.isdigit() for c in day.name)
+			if digitsum != 8:
+				#first directory... no files in it
+				continue
 			dirlist = list()
 			dayint = day.name[-3:-1]
 			srcdir = day.name
