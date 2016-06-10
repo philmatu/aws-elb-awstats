@@ -257,10 +257,15 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 	part = 1
 	outStream = BytesIO()
 	compressor = gzip.GzipFile(fileobj=outStream, mode='wb')
+	logcount = 0
 	with smart_open.smart_open(srcFileKey) as srcStream:
 		for line in srcStream:
 			line = bytes(line).decode('UTF-8')
 			cleanedString = clean(line)
+			logcount = logcount + 1
+			if logcount > 10000:
+				print ("10000 more Log entries processed...")
+				logcount = 0
 			if len(cleanedString) < 1:
 				continue
 			buf = "%s%s\n" % (buf, cleanedString)
@@ -275,15 +280,17 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 					outStream.truncate()
 					part = part + 1
 				buf = buf[CHUNK_SIZE:]
+	print("Finishing processing of log %s" % srcFileKey)
 	if(len(buf) > 0):
 		block = bytes(buf[:CHUNK_SIZE],'utf_8')
 		#write compressed out as binary data
 		compressor.write(block)
-		compressor.close()
 		outStream.seek(0)
 		mpu.upload_part_from_file(outStream, part)
-		mpu.complete_upload()
+	compressor.close()
+	mpu.complete_upload()#always complete upload regardless if there is remaining unwritten data or not
 	with WRITE_LOCK:
+		print("Updating the status file now with %s"%dst_path_sans_GZ)
 		updateStatusFile(dst_path_sans_GZ)
 
 def isIPV6(addr):
@@ -297,7 +304,10 @@ def splitIPV6Ports(line):
 	#after ipv4 split... try for ipv6
 	#split ipv6 addresses, this could show up in the 5/4/3 array position only, these will have a final : with port if they are an IP
 	#Acknowledgement from: http://stackoverflow.com/questions/319279/how-to-validate-ip-address-in-python
-	parts = shlex.split(line) #lexical parse gives me tokens enclosed by quotes for url string as awstats sees them
+	try:
+		parts = shlex.split(line) #lexical parse gives me tokens enclosed by quotes for url string as awstats sees them
+	except:
+		return ""
 	if ":" in parts[5]:
 		subparts = parts[5].rsplit(":", 1)
 		if isIPV6(subparts[0]) and (len(subparts) > 1):
@@ -323,21 +333,36 @@ def convertTimeToLocal(line):
 	et_dt = gmt_dt.astimezone(ET_TZ)
 	return ("%s %s" % (et_dt.strftime('%Y-%m-%d %H:%M:%S'), parts[1]))
 
+#caused by: 2016-06-03 06:45:07 appelb-pr-ElasticL-3M29U6FNWKZ7 94.103.129.51 34835 10.137.122.228 80 0.000021 0.000898 0.000021 302 302 0 341 "GET http://example.com:80/m/index%3Bjsessionid=965DE6793829DC313C?q=302996'" HTTP/1.1" "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1; generic_01_01; YPC 3.2.0; .NET CLR 1.1.4322; yplus 5.3.04b)" - -
+def cleanURLString(line):
+	#cleans quotes (" and ') from the URL string that users can enter
+	ind_st = line.find("\"GET") +1#remove quote
+	ind_end = line.rfind("HTTP/1.1\"") -1#remove quote
+	data = line[ind_st:ind_end]
+	data = data.replace("\"","")
+	data = data.replace("\'","")
+	line = "%s%s%s" % (line[:ind_st],data,line[ind_end:])
+	return line
+
 def clean(line):
 	line = line.strip()
 	if len(line) < 20:
 		return ""
 	if line.startswith("#"):
 		return "" #ignore comments
+	line = cleanURLString(line)
 	line = convertTimeToLocal(line)
 	line = spacePorts.sub('\\1 \\2', line)
 	line = splitIPV6Ports(line)
+	if len(line) < 20:
+		return ""#bad string format
 	line = removeHost.sub('', line)
 	
 	#we are missing a backend processing time, since a 504 fails, so replace this on the lines where we have a 504, eliminating many errors
 	line = line.replace("-1 -1 -1 504 0 0 0", "-1 -1 -1 -1 504 0 0 0")
 	line = line.replace("-1 -1 -1 502 0 0 0", "-1 -1 -1 -1 502 0 0 0")
-	
+
+	#this method has a try/catch in splitIPV6Ports incase of " or ' characters in the URL string which would cause issues...	
 	parts = shlex.split(line) #lexical parse gives me tokens enclosed by quotes for url string as awstats sees them
 	splt = len(parts) #lexical parse gives me tokens enclosed by quotes for url string
 	if splt is 15:
@@ -375,7 +400,6 @@ def clean(line):
 		methodurl_stripped = "%s %s %s" % (url_parts[0], new_method, url_parts[2])
 	finalLine = "%s %s %s %s %s %s %s \"%s\" \"%s\" %s" % (line[0], line[1], line[3], line[4], line[8], line[11], line[13], methodurl_stripped, line[15], line[16])
 	return finalLine
-	
 
 def readQueue():
 	qconn = boto.sqs.connect_to_region("us-east-1", aws_access_key_id=QUEUE_AWS_ACCESS_KEY, aws_secret_access_key=QUEUE_AWS_SECRET_KEY)
