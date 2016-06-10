@@ -17,6 +17,7 @@ Changes:
 	5/31/16 - Added date-to-handle parameter option to avoid back-processing
 	6/1/16 - Status file in gz format accounted for, still needs to account for reprocess queue
 	6/2/16 - Finalized Script with Queues implemented
+	6/9/16 - Added a second parameter to allow for a queue range
 '''
 
 import sys
@@ -30,16 +31,25 @@ import json
 CONFIG = configparser.ConfigParser()
 
 DATE_TO_PROCESS = False
+DATE_TO_END = False
 ENQUEUED_TASKS = list()
-if len(sys.argv) == 2 or len(sys.argv) == 3:
+if len(sys.argv) == 2 or len(sys.argv) == 3 or len(sys.argv) == 4:
 	inputini = sys.argv[1];
 	if inputini.endswith(".ini"):
 		CONFIG.read(inputini)
 	else:
-		print ("usage: ./compress_scheduler.py <configfile> [<date_to_handle_in_MMDDYYYY>]")
+		print ("usage: ./compress_scheduler.py <configfile> [<date_to_process/startAt_in_MMDDYYYY> <date_to_end_at_if_intended>]")
 		sys.exit(0)
 
-	if len(sys.argv) == 3:
+	if len(sys.argv) == 3 or len(sys.argv) == 4:
+		if len(sys.argv) == 4:
+			DATE_TO_END = str(sys.argv[3]).strip()
+			if len(DATE_TO_END) is not 8:
+				print("Please enter the end date as MMDDYYYY (8 integers), you entered %s" % DATE_TO_END)
+				sys.exit(0)
+			if not DATE_TO_END.isdigit():
+				print("The end date to handle you entered is not in MMDDYYYY (8 integers), please try again.  You entered %s" % DATE_TO_END)
+				sys.exit(0)
 		#test format and set date
 		DATE_TO_PROCESS = str(sys.argv[2]).strip()
 		if len(DATE_TO_PROCESS) is not 8:
@@ -49,7 +59,7 @@ if len(sys.argv) == 2 or len(sys.argv) == 3:
 			print("The date to handle you entered is not in MMDDYYYY (8 integers), please try again.  You entered %s" % DATE_TO_PROCESS)
 			sys.exit(0)
 else:
-	print ("usage: ./compress_scheduler.py <configfile> [<date_to_handle_in_MMDDYYYY>]")
+	print ("usage: ./compress_scheduler.py <configfile> [<date_to_process/startAt_in_MMDDYYYY> <date_to_end_at_if_intended>]")
 	sys.exit(0)
 
 #Load configuration from ini file
@@ -210,6 +220,13 @@ def readIncompleteQueue(deleteAfterRead=True):
 #Begin main code
 
 matchdir = False
+endmatchdir = False
+if DATE_TO_END is not False:
+	#MMDDYYYY
+	m = DATE_TO_END[:2]
+	d = DATE_TO_END[2:4]
+	y = DATE_TO_END[4:]
+	endmatchdir = "%s/%s/%s" % (y,m,d)
 if DATE_TO_PROCESS is not False:
 	#MMDDYYYY
 	m = DATE_TO_PROCESS[:2]
@@ -218,11 +235,11 @@ if DATE_TO_PROCESS is not False:
 	matchdir = "%s/%s/%s" % (y,m,d)
 
 INCOMPLETE_LIST = list()
-if matchdir is False:
-	INCOMPLETE_LIST = readIncompleteQueue()
-else:
+if endmatchdir is False and matchdir is True:
 	#if we're running a match directory operation, we shouldn't look at incomplete items
 	INCOMPLETE_LIST = readIncompleteQueue(deleteAfterRead=False)
+else:
+	INCOMPLETE_LIST = readIncompleteQueue()
 	
 s3conn = boto.connect_s3(SRC_AWS_ACCESS_KEY, SRC_AWS_SECRET_KEY)
 bucket = s3conn.get_bucket(SRC_PATH[:SRC_PATH.index('/')])
@@ -236,6 +253,7 @@ for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'):
 			srcdir = day.name
 			dstdir = "%s/%s/%s" % (yearint, monthint, dayint)
 			#TODO: skip today's date
+			#TODO handle date range parameter
 			if matchdir is not False:
 				if dstdir not in matchdir:
 					continue
