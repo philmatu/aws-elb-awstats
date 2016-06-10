@@ -1,4 +1,4 @@
-#/bin/bash
+#/bin/sh
 cd /root/aws-elb-awstats/
 /usr/bin/git pull
 /usr/bin/wget http://controller.node.com/config.ini.file -O /root/aws-elb-awstats/elb/config.ini
