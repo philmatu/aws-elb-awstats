@@ -214,7 +214,7 @@ def getDirectoryList(d=None):
 	return out
 
 #the completedFile doesn't have a .gz, even though we know all files here should end in GZ, this is handled by the scheduler
-def updateStatusFile(completedFile, completionListVerify=list()):
+def updateStatusFile(completedFile, completionListVerify=None):
 	dst_s3conn = boto.connect_s3(DST_AWS_ACCESS_KEY, DST_AWS_SECRET_KEY)
 	dst_bucket = dst_s3conn.get_bucket(DST_PATH[:DST_PATH.index('/')])
 	status_file_path = "%s/%s" % (completedFile.rsplit('/', 1)[0],PROCESSING_STATUS_FILE)
@@ -230,7 +230,7 @@ def updateStatusFile(completedFile, completionListVerify=list()):
 	else:
 		status_file_text = bytes(status_file_key.get_contents_as_string()).decode(encoding='UTF-8')
 		#everything has been done if we hvae a completionList object, so validate this
-		if len(completionListVerify) > 0:
+		if completionListVerify is not None:
 			#make sure that everything we were going to complete is in the status file
 			for line in completionListVerify:
 				if line not in status_file_text.split("\n"):
@@ -241,6 +241,9 @@ def updateStatusFile(completedFile, completionListVerify=list()):
 			dldir = completedFile.split('/', 1)[1]
 			awss3dirlist = getDirectoryList(d=dldir)
 			for line in status_file_text.split("\n"):
+				if len(line) < 1:
+					print("Warn: blank line in status file detected... this isn't normal but can be handled gracefully")
+					continue#ignore blank lines, although this is abnormal
 				if line not in awss3dirlist[dldir]:
 					if PROCESSING_STATUS_FILE_COMPLETE_TXT in line:
 						#if we manage to get this far with a complete status file, don't rewrite the data into it

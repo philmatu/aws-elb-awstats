@@ -147,7 +147,7 @@ def processDirectory(dstdir, dirlist):
 				if firstLine:
 					firstLine = False
 					if PROCESSING_STATUS_FILE_COMPLETE_TXT in line:
-						print("The directory %s is completed already, exiting this directory")
+						print("The directory %s is completed already, exiting this directory"%dst_path)
 						return
 				completedFiles.append(line)
 				#find any file in the meta data that isn't present in the source directory, warn on these
@@ -194,6 +194,11 @@ def processDirectory(dstdir, dirlist):
 			ToBeProcessedFiles.append(srcfilename)
 	
 	if len(ToBeProcessedFiles) > 0:
+		print("Queuing directory %s for processing" % dstdir)
+		enqueue(dstdir, ToBeProcessedFiles)
+		ENQUEUED_TASKS.append(dstdir)
+	else:
+		print("The directory should already be complete, queuing to get the line added! %s"%dstdir)
 		enqueue(dstdir, ToBeProcessedFiles)
 		ENQUEUED_TASKS.append(dstdir)
 	dests3conn.close()
