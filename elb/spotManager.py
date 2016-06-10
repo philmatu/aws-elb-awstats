@@ -186,6 +186,9 @@ def getSpotRequests(conn): # connection is connect_to_region of 3c2
 #pass in the instance id to get the IP address of the instance
 def getDNSFromInstanceID(instanceid, ec2connection):
 	reservations = ec2connection.get_all_reservations(filters={'instance-id' : instanceid})
+	if len(reservations) < 1:
+		print("There are no spot instances available, did you launch any?")
+		return ""
 	instance = reservations[0].instances[0]
 	if "running" in instance.state:
 		return instance.public_dns_name
