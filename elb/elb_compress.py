@@ -189,11 +189,11 @@ def isAlreadyInStatusFile(completedFile):
 			return True
 	return False
 
-def getDirectoryList(d=None):
+def getDirectoryList(key,sec,inpath,d=None):
 	out = {}
-	s3conn = boto.connect_s3(SRC_AWS_ACCESS_KEY, SRC_AWS_SECRET_KEY)
-	bucket = s3conn.get_bucket(SRC_PATH[:SRC_PATH.index('/')])
-	for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'):
+	s3conn = boto.connect_s3(key, sec)
+	bucket = s3conn.get_bucket(inpath[:inpath.index('/')])
+	for year in bucket.list(prefix=inpath[inpath.index('/')+1:], delimiter='/'):
 		yearint = year.name[-5:-1]
 		for month in bucket.list(prefix=year.name, delimiter='/'):
 			monthint = month.name[-3:-1]
@@ -239,7 +239,7 @@ def updateStatusFile(completedFile, completionListVerify=None):
 					return
 			#make sure every line of the status file has a file in the directory
 			dldir = completedFile.split('/', 1)[1]
-			awss3dirlist = getDirectoryList(d=dldir)
+			awss3dirlist = getDirectoryList(key=DST_AWS_ACCESS_KEY,sec=DST_AWS_SECRET_KEY,inpath=DST_PATH,d=dldir)
 			for line in status_file_text.split("\n"):
 				if len(line) < 1:
 					print("Warn: blank line in status file detected... this isn't normal but can be handled gracefully")
@@ -496,7 +496,7 @@ if DATE_TO_PROCESS is not False:
 	d = DATE_TO_PROCESS[2:4]
 	y = DATE_TO_PROCESS[4:]
 	matchdir = "%s/%s/%s/" % (y,m,d)
-	dlist = getDirectoryList(d=matchdir)
+	dlist = getDirectoryList(key=SRC_AWS_ACCESS_KEY,sec=SRC_AWS_SECRET_KEY,inpath=SRC_PATH,d=matchdir)
 	for key in dlist:
 		if matchdir in key:
 			manual_dirlist = list(dlist[key])
