@@ -212,9 +212,9 @@ def getRunningTaskOnInstance(instanceid, ec2connection):
 		print("WARN: The instance \"%s\" timed out... did it start yet?  Url: \"%s\"" % (instanceid,url))
 		return ""
 	data = resource.read().decode('utf-8').strip()
-	if data.count("/") != 4:
+	if data.count("/") != 3:
 		if data.count("/") != 0:
-			print("\tWARNING: There were not 0 nor 4 \"/\"'s in the instance's status file, the instance is %s with web query %s and the data from it was %s" % (instanceid,url,data))
+			print("\tWARNING: There were not 0 nor 3 \"/\"'s in the instance's status file, the instance is %s with web query %s and the data from it was %s" % (instanceid,url,data))
 	return data
 
 def randomword(length):
