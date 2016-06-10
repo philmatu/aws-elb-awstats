@@ -189,6 +189,30 @@ def isAlreadyInStatusFile(completedFile):
 			return True
 	return False
 
+def getDirectoryList(d=None):
+	out = {}
+	s3conn = boto.connect_s3(SRC_AWS_ACCESS_KEY, SRC_AWS_SECRET_KEY)
+	bucket = s3conn.get_bucket(SRC_PATH[:SRC_PATH.index('/')])
+	for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'):
+		yearint = year.name[-5:-1]
+		for month in bucket.list(prefix=year.name, delimiter='/'):
+			monthint = month.name[-3:-1]
+			for day in bucket.list(prefix=month.name, delimiter='/'):
+				dirlist = list()
+				dayint = day.name[-3:-1]
+				srcdir = day.name
+				dstdir = "%s/%s/%s/" % (yearint, monthint, dayint)
+				if d is not None:
+					if d not in dstdir:
+						continue
+				tmp = list()
+				for fileWithPath in bucket.list(prefix=srcdir, delimiter='/'):
+					fname = fileWithPath.name.split('/')[-1]
+					tmp.append(fname)
+				out[dstdir] = tmp
+	s3conn.close()
+	return out
+
 #the completedFile doesn't have a .gz, even though we know all files here should end in GZ, this is handled by the scheduler
 def updateStatusFile(completedFile, completionListVerify=list()):
 	dst_s3conn = boto.connect_s3(DST_AWS_ACCESS_KEY, DST_AWS_SECRET_KEY)
@@ -205,14 +229,19 @@ def updateStatusFile(completedFile, completionListVerify=list()):
 		status_file_key.set_contents_from_string(theCompletedFile)
 	else:
 		status_file_text = bytes(status_file_key.get_contents_as_string()).decode(encoding='UTF-8')
+		#everything has been done if we hvae a completionList object, so validate this
 		if len(completionListVerify) > 0:
+			#make sure that everything we were going to complete is in the status file
 			for line in completionListVerify:
 				if line not in status_file_text.split("\n"):
 					print("The task \"%s\" isn't in the status file, this means I didn't complete successfully... I will notify the scheduler queue of my directory: %s" % (line,completedFile))
 					enQueueNonCompletedDirectory(DIRECTORY)#string in YYYY/MM/DD from the original queue
 					return
+			#make sure every line of the status file has a file in the directory
+			dldir = completedFile.split('/', 1)[1]
+			awss3dirlist = getDirectoryList(d=dldir)
 			for line in status_file_text.split("\n"):
-				if line not in completionListVerify:
+				if line not in awss3dirlist[dldir]:
 					if PROCESSING_STATUS_FILE_COMPLETE_TXT in line:
 						#if we manage to get this far with a complete status file, don't rewrite the data into it
 						print("The directory \"%s\" was already completed, not sure how we got here, but it's ok, I'll end processing now."%completedFile)
@@ -464,22 +493,10 @@ if DATE_TO_PROCESS is not False:
 	d = DATE_TO_PROCESS[2:4]
 	y = DATE_TO_PROCESS[4:]
 	matchdir = "%s/%s/%s/" % (y,m,d)
-	s3conn = boto.connect_s3(SRC_AWS_ACCESS_KEY, SRC_AWS_SECRET_KEY)
-	bucket = s3conn.get_bucket(SRC_PATH[:SRC_PATH.index('/')])
-	for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'):
-		yearint = year.name[-5:-1]
-		for month in bucket.list(prefix=year.name, delimiter='/'):
-			monthint = month.name[-3:-1]
-			for day in bucket.list(prefix=month.name, delimiter='/'):
-				dirlist = list()
-				dayint = day.name[-3:-1]
-				srcdir = day.name
-				dstdir = "%s/%s/%s/" % (yearint, monthint, dayint)
-				if matchdir in dstdir:
-					for fileWithPath in bucket.list(prefix=srcdir, delimiter='/'):
-						fname = fileWithPath.name.split('/')[-1]
-						manual_dirlist.append(fname)
-	s3conn.close()
+	dlist = getDirectoryList(d=matchdir)
+	for key in dlist:
+		if matchdir in key:
+			manual_dirlist = list(dlist[key])
 
 setLocalWebStatusFileText("")
 #queue processing mode (if a date isn't set)
