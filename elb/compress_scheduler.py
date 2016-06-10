@@ -23,6 +23,7 @@ Changes:
 import sys
 import boto
 import boto.sqs
+import datetime
 from boto.sqs.message import Message
 from boto.s3.key import Key
 import configparser
@@ -217,22 +218,30 @@ def readIncompleteQueue(deleteAfterRead=True):
 	qconn.close()
 	return out
 
+
 #Begin main code
 
+#assume that system clock is in GMT/UTC as AWS logs are in
+todaysdate = datetime.datetime.today().strftime('%Y/%m/%d/')
+
+startdate = False
+enddate = False
 matchdir = False
 endmatchdir = False
 if DATE_TO_END is not False:
 	#MMDDYYYY
-	m = DATE_TO_END[:2]
-	d = DATE_TO_END[2:4]
-	y = DATE_TO_END[4:]
-	endmatchdir = "%s/%s/%s" % (y,m,d)
+	em = DATE_TO_END[:2]
+	ed = DATE_TO_END[2:4]
+	ey = DATE_TO_END[4:]
+	endmatchdir = "%s/%s/%s" % (ey,em,ed)
+	enddate = datetime.datetime.strptime(DATE_TO_END, "%m%d%Y").date()
 if DATE_TO_PROCESS is not False:
 	#MMDDYYYY
-	m = DATE_TO_PROCESS[:2]
-	d = DATE_TO_PROCESS[2:4]
-	y = DATE_TO_PROCESS[4:]
-	matchdir = "%s/%s/%s" % (y,m,d)
+	sm = DATE_TO_PROCESS[:2]
+	sd = DATE_TO_PROCESS[2:4]
+	sy = DATE_TO_PROCESS[4:]
+	startdate = datetime.datetime.strptime(DATE_TO_PROCESS, "%m%d%Y").date()
+	matchdir = "%s/%s/%s" % (sy,sm,sd)
 
 INCOMPLETE_LIST = list()
 if endmatchdir is False and matchdir is True:
@@ -252,11 +261,15 @@ for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'):
 			dayint = day.name[-3:-1]
 			srcdir = day.name
 			dstdir = "%s/%s/%s" % (yearint, monthint, dayint)
-			#TODO: skip today's date
-			#TODO handle date range parameter
+			if dstdir in todaysdate:
+				continue # don't process today's date
 			if matchdir is not False:
-				if dstdir not in matchdir:
+				if (dstdir not in matchdir) and (endmatchdir is False):
 					continue
+				elif endmatchdir is not False:
+					currentprocdate = datetime.datetime.strptime("%s%s%s"%(monthint,dayint,yearint), "%m%d%Y").date()
+					if not startdate <= currentprocdate <= enddate:
+						continue
 			for fileWithPath in bucket.list(prefix=srcdir, delimiter='/'):
 				fname = fileWithPath.name.split('/')[-1]
 				dirlist.append(fname)
