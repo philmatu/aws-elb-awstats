@@ -27,3 +27,7 @@ EC2_SECURITY_GROUP = sg-b237a4b1
 EC2_REGION = us-east-1
 EC2_AWS_ACCESS_KEY = ACCESSS3KEY
 EC2_AWS_SECRET_KEY = SECRETS3KEY
+[awstats]
+DOMAIN = domain.com
+LOGRESOLV = /usr/share/awstats/tools/logresolvemerge.pl
+AWSTATS_LAST_ADDED_FILE = /dirtorepo/aws-elb-awstats/elb/lastpos.txt
