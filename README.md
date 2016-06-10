@@ -2,6 +2,8 @@
 Author: Philip Matuskiewicz
 Date: 5/24/2016
 
+Last Modification: 6/9/16 - Code complete for ELB processing component (still needs AWStats Input component)
+
 Acknowledgements:
 http://boto.cloudhackers.com/en/latest/ref/index.html #api documentation, especially S3, SQS, VPC and EC2
 https://github.com/rohit01/awstats_for_elb/tree/master/roles/awstats
