@@ -94,7 +94,12 @@ def downloadFile(bucket, path, key):
 					if line.startswith("#"):
 						continue #ignore comments
 					line = convertTimeToLocal(line)
-					data = shlex.split(line)
+					try:
+						data = shlex.split(line)
+					except:
+						#NOTE: possible todo... similar to ELB, this could be fixed by parsing out the GET string
+						print("Shlex encountered an extra \" or \' in the line... skipping")
+						continue
 					if len(data) < 12:
 						continue
 					for i in range(0, 11):
