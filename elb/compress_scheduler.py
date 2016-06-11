@@ -246,6 +246,19 @@ def readIncompleteQueue(deleteAfterRead=True):
 	qconn.close()
 	return out
 
+def enQueueNonCompletedDirectory(directory):
+	qconn = boto.sqs.connect_to_region("us-east-1", aws_access_key_id=QUEUE_AWS_ACCESS_KEY, aws_secret_access_key=QUEUE_AWS_SECRET_KEY)
+	logProcQueue = qconn.get_queue(INCOMPLETE_TASKS_QUEUE_NAME)
+	if logProcQueue is None:
+		print ("Creating SQS Queue: %s with Key %s" % (INCOMPLETE_TASKS_QUEUE_NAME,QUEUE_AWS_ACCESS_KEY))
+		logProcQueue = qconn.create_queue(INCOMPLETE_TASKS_QUEUE_NAME)
+	data_out = {}
+	data_out['directory'] = directory #in format of yyyy/mm/dd
+	json_encoded_message = json.dumps(data_out)
+	queuemessage = Message()
+	queuemessage.set_body(json_encoded_message)
+	print("Enqueing Directory (YYYY/MM/DD) %s for reconsideration, I didn't touch it this time for whatever reason" % data_out['directory'])
+	logProcQueue.write(queuemessage)
 
 #Begin main code
 
@@ -288,12 +301,14 @@ if USE_AWSTATS_POSITION_FILE:
 		sys.exit(0)
 
 INCOMPLETE_LIST = list()
+INCOMPLETE_DEL = False
 if endmatchdir is False and matchdir is not False:
 	#if we're running a match directory operation, we shouldn't look at incomplete items
 	INCOMPLETE_LIST = readIncompleteQueue(deleteAfterRead=False)
 elif USE_AWSTATS_POSITION_FILE:
 	INCOMPLETE_LIST = readIncompleteQueue(deleteAfterRead=False)
 else:
+	INCOMPLETE_DEL = True
 	INCOMPLETE_LIST = readIncompleteQueue()
 
 s3conn = boto.connect_s3(SRC_AWS_ACCESS_KEY, SRC_AWS_SECRET_KEY)
@@ -336,6 +351,8 @@ for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'):
 			processDirectory(dstdir, dirlist)
 for task in INCOMPLETE_LIST:
 	if task not in ENQUEUED_TASKS:
+		if INCOMPLETE_DEL:
+			enQueueNonCompletedDirectory(task)
 		if matchdir is False:
 			print("WARNING: The task \"%s\" wasn't queued for reprocessing, yet it failed on a worker... Please manually verify!" % task)
 	else:

@@ -181,6 +181,7 @@ for year in bucket.list(prefix=DST_PATH[DST_PATH.index('/')+1:], delimiter='/'):
 			if digitsum != 8:
 				#first directory... no files in it
 				continue
+			
 			dayint = day.name[-3:-1]
 			dirkey = "%s%s%s" % (yearint, monthint, dayint)
 			monthkey = "%s%s" % (yearint, monthint)
@@ -210,7 +211,7 @@ for year in bucket.list(prefix=DST_PATH[DST_PATH.index('/')+1:], delimiter='/'):
 					allowed = False #if a directory is locked, don't allow awstats processing of it!
 					break #get out of the for loop looking at files in this directory
 				files.append(fname)
-			
+				
 			if not allowed:
 				if lastdateseen is None:
 					lastdateseen = procdate
@@ -237,6 +238,7 @@ for year in bucket.list(prefix=DST_PATH[DST_PATH.index('/')+1:], delimiter='/'):
 mypythonscript = os.path.realpath(__file__)
 mypath = mypythonscript[:mypythonscript.rindex('/')]
 
+SEQUENCE = None #keep track of sequence of dates, if there is a break, quit processing and spit out an error
 #sort the dictionary of work items
 for key in sorted(work):
 	if lastdateseen is not None:
@@ -245,6 +247,12 @@ for key in sorted(work):
 			continue
 	data = work[key]
 	print("Processing for Date: %s, Directory: %s" % (key, data['path']))
+	
+	#TODO don't let this script skip over a directory since awstats can't skip
+	#SEQUENCE = key
+	#print(SEQUENCE)#TODO test this
+	#sys.exit(0)
+	
 	direc = "tmpdata/%s"%data['path']
 	gziplogpath = "%s/%s" % (mypath,direc)
 	
