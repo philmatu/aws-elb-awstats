@@ -313,7 +313,6 @@ for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'):
 				sys.exit(0)
 				#first directory... no files in it
 				continue
-			sys.exit(0)
 			dirlist = list()
 			dayint = day.name[-3:-1]
 			srcdir = day.name
