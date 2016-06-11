@@ -3,6 +3,7 @@
 ***
 AWStats Updater - This script looks for the latest processed directory (via scripts here) on DST S3 Directory, pulls each day in chronological order, and updates AWStats with it
 
+#TODO: add stops / bus routes to the list
 
 For back processing, this script takes a time range of directories to pull
 For example, if you enter ./awstatsUpdater.py config.ini 201605, you'll process ONLY the month of May, 2016
@@ -248,11 +249,14 @@ for key in sorted(work):
 	data = work[key]
 	print("Processing for Date: %s, Directory: %s" % (key, data['path']))
 	
-	#TODO don't let this script skip over a directory since awstats can't skip
-	#SEQUENCE = key
-	#print(SEQUENCE)#TODO test this
-	#sys.exit(0)
-	
+	if SEQUENCE is None:
+		SEQUENCE = key
+	else:
+		dayplus = SEQUENCE + datetime.timedelta(days=1)
+		if dayplus != key:
+			print("This date isn't in sequence from the previous date, stopping because AWStats doesn't handle backprocessing in between months, please trigger log processing...")
+			break
+		
 	direc = "tmpdata/%s"%data['path']
 	gziplogpath = "%s/%s" % (mypath,direc)
 	
