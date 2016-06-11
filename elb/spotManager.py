@@ -329,6 +329,8 @@ def do_listorphanedinstances():
 	for item in reqs["active"]:
 		instanceWorkDir = getRunningTaskOnInstance(item["instance"], conn)
 		instanceIP = getDNSFromInstanceID(item["instance"], conn)
+		if len(instanceWorkDir) > 1:
+			continue
 		if CMD1:
 			cancelSpotRequest(conn, item)
 		else:
@@ -337,6 +339,8 @@ def do_listorphanedinstances():
 	for item in reqs["cancelled"]:
 		instanceIP = getDNSFromInstanceID(item["instance"], conn)
 		instanceWorkDir = getRunningTaskOnInstance(item["instance"], conn)
+		if len(instanceWorkDir) > 1:
+			continue
 		if CMD1:
 			cancelSpotRequest(conn, item)
 		else:

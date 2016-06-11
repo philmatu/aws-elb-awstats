@@ -7,6 +7,8 @@ Input Logs are fed in through Amazon SQS via the scheduler, this works across AW
 This is meant to be run on Spot Instances, meaning reduced cost to process huge amounts of data logs
 ***
 
+#TODO: in the future, we need to catch the shutdown signal too from EC2 incase of accidental deletion
+
 Author: Philip Matuskiewicz - philip.matuskiewicz@nyct.com       
 
 Changes:
