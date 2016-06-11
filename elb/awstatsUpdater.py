@@ -68,9 +68,9 @@ DST_AWS_SECRET_KEY = CONFIG.get('main', 'DST_AWS_SECRET_KEY')
 PROCESSING_STATUS_FILE = CONFIG.get('main', 'PROCESSING_STATUS_FILE') # contains all files that are finished, contains DONE if all processing is done
 PROCESSING_STATUS_FILE_COMPLETE_TXT = CONFIG.get('main', 'PROCESSING_STATUS_FILE_COMPLETE_TXT').strip()
 PROCESSING_LOCK_FILE = CONFIG.get('main', 'PROCESSING_LOCK_FILE')
+AWSTATS_LAST_ADDED_FILE = CONFIG.get('main', 'AWSTATS_LAST_ADDED_FILE')
 DOMAIN = CONFIG.get('awstats', 'DOMAIN')
 LOGRESOLV = CONFIG.get('awstats', 'LOGRESOLV')
-AWSTATS_LAST_ADDED_FILE = CONFIG.get('awstats', 'AWSTATS_LAST_ADDED_FILE')
 
 def stream_gzip_decompress(stream):
 	dec = zlib.decompressobj(32 + zlib.MAX_WBITS)  # offset 32 to skip the header
@@ -172,7 +172,12 @@ for year in bucket.list(prefix=DST_PATH[DST_PATH.index('/')+1:], delimiter='/'):
 	for month in bucket.list(prefix=year.name, delimiter='/'):
 		monthint = month.name[-3:-1]
 		for day in bucket.list(prefix=month.name, delimiter='/'):
-			digitsum = sum(c.isdigit() for c in day.name)
+			testdirname = ""
+			if day.name.endswith('/'):
+				testdirname = day.name[len(day.name)-11:-1]
+			else:
+				testdirname = day.name[len(day.name)-11:-1]
+			digitsum = sum(c.isdigit() for c in testdirname)
 			if digitsum != 8:
 				#first directory... no files in it
 				continue

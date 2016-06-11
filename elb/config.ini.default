@@ -17,6 +17,7 @@ QUEUE_AWS_ACCESS_KEY = ACCESSSQSKEY
 QUEUE_AWS_SECRET_KEY = SECRETSQSKEY
 WORKER_STATUS_FILE_NAME = status.txt
 WORKER_WEB_ROOT = /var/www/html/
+AWSTATS_LAST_ADDED_FILE = /dirtorepo/aws-elb-awstats/elb/lastpos.txt
 [spot]
 VPC_ID = vpc-ca0372b3
 ALLOWED_SUBNETS = subnet-273a575b
@@ -30,4 +31,3 @@ EC2_AWS_SECRET_KEY = SECRETS3KEY
 [awstats]
 DOMAIN = domain.com
 LOGRESOLV = /usr/share/awstats/tools/logresolvemerge.pl
-AWSTATS_LAST_ADDED_FILE = /dirtorepo/aws-elb-awstats/elb/lastpos.txt

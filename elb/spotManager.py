@@ -117,7 +117,12 @@ def getLocks():
 		for month in bucket.list(prefix=year.name, delimiter='/'):
 			monthint = month.name[-3:-1]
 			for day in bucket.list(prefix=month.name, delimiter='/'):
-				digitsum = sum(c.isdigit() for c in day.name)
+				testdirname = ""
+				if day.name.endswith('/'):
+					testdirname = day.name[len(day.name)-11:-1]
+				else:
+					testdirname = day.name[len(day.name)-11:-1]
+				digitsum = sum(c.isdigit() for c in testdirname)
 				if digitsum != 8:
 					#first directory... no files in it
 					continue

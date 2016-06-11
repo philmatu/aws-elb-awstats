@@ -21,6 +21,7 @@ Changes:
 '''
 
 import sys
+import os
 import boto
 import boto.sqs
 import datetime
@@ -31,6 +32,7 @@ import json
 
 CONFIG = configparser.ConfigParser()
 
+USE_AWSTATS_POSITION_FILE = False
 DATE_TO_PROCESS = False
 DATE_TO_END = False
 ENQUEUED_TASKS = list()
@@ -39,10 +41,12 @@ if len(sys.argv) == 2 or len(sys.argv) == 3 or len(sys.argv) == 4:
 	if inputini.endswith(".ini"):
 		CONFIG.read(inputini)
 	else:
-		print ("usage: ./compress_scheduler.py <configfile> [<date_to_process/startAt_in_MMDDYYYY> <date_to_end_at_if_intended>]")
+		print ("usage: ./compress_scheduler.py <configfile> [<date_to_process/startAt_in_MMDDYYYY/or_\"FILE\"_toUseAWStatsStatusFileDate> <date_to_end_at_if_intended>]")
 		sys.exit(0)
-
-	if len(sys.argv) == 3 or len(sys.argv) == 4:
+	if len(sys.argv) == 3:
+		if "file" in str(sys.argv[2]).strip().lower():
+			USE_AWSTATS_POSITION_FILE = True
+	if (not USE_AWSTATS_POSITION_FILE) and (len(sys.argv) == 3 or len(sys.argv) == 4):
 		if len(sys.argv) == 4:
 			DATE_TO_END = str(sys.argv[3]).strip()
 			if len(DATE_TO_END) is not 8:
@@ -54,13 +58,13 @@ if len(sys.argv) == 2 or len(sys.argv) == 3 or len(sys.argv) == 4:
 		#test format and set date
 		DATE_TO_PROCESS = str(sys.argv[2]).strip()
 		if len(DATE_TO_PROCESS) is not 8:
-			print("Please enter the date to handle as MMDDYYYY (8 integers), you entered %s" % DATE_TO_PROCESS)
+			print("Please enter the date to handle as MMDDYYYY (8 integers) or \"FILE\", you entered %s" % DATE_TO_PROCESS)
 			sys.exit(0)
 		if not DATE_TO_PROCESS.isdigit():
-			print("The date to handle you entered is not in MMDDYYYY (8 integers), please try again.  You entered %s" % DATE_TO_PROCESS)
+			print("The date to handle you entered is not in MMDDYYYY (8 integers) or \"FILE\", please try again.  You entered %s" % DATE_TO_PROCESS)
 			sys.exit(0)
 else:
-	print ("usage: ./compress_scheduler.py <configfile> [<date_to_process/startAt_in_MMDDYYYY> <date_to_end_at_if_intended>]")
+	print ("usage: ./compress_scheduler.py <configfile> [<date_to_process/startAt_in_MMDDYYYY/or_\"FILE\"_toUseAWStatsStatusFileDate> <date_to_end_at_if_intended>]")
 	sys.exit(0)
 
 #Load configuration from ini file
@@ -77,6 +81,7 @@ QUEUE_NAME = CONFIG.get('main', 'QUEUE_NAME')
 INCOMPLETE_TASKS_QUEUE_NAME = CONFIG.get('main', 'INCOMPLETE_TASKS_QUEUE_NAME')
 QUEUE_AWS_ACCESS_KEY = CONFIG.get('main', 'QUEUE_AWS_ACCESS_KEY')
 QUEUE_AWS_SECRET_KEY = CONFIG.get('main', 'QUEUE_AWS_SECRET_KEY')
+AWSTATS_LAST_ADDED_FILE = CONFIG.get('main', 'AWSTATS_LAST_ADDED_FILE')
 
 #SQS allows max string length of 256KB, in my case, the max is around 50KB which is sufficient for our needs
 def enqueue(dstdir, tasks):
@@ -248,13 +253,28 @@ if DATE_TO_PROCESS is not False:
 	startdate = datetime.datetime.strptime(DATE_TO_PROCESS, "%m%d%Y").date()
 	matchdir = "%s/%s/%s" % (sy,sm,sd)
 
+if USE_AWSTATS_POSITION_FILE:
+	if os.path.exists(AWSTATS_LAST_ADDED_FILE):
+		with open(AWSTATS_LAST_ADDED_FILE, "r") as startfile:
+			for line in startfile:
+				if len(line) > 3: # line will be in YYYYMMDD or %Y%m%d
+					sy = line[:4]
+					sm = line[4:6]
+					sd = line[6:8]
+					startdate = datetime.datetime.strptime(line, "%Y%m%d").date()
+					matchdir = "%s/%s/%s" % (sy,sm,sd)
+					enddate = datetime.datetime.strptime(todaysdate, "%Y/%m/%d/").date()
+					endmatchdir = enddate.strftime('%Y/%m/%d')
+
 INCOMPLETE_LIST = list()
 if endmatchdir is False and matchdir is not False:
 	#if we're running a match directory operation, we shouldn't look at incomplete items
 	INCOMPLETE_LIST = readIncompleteQueue(deleteAfterRead=False)
+elif USE_AWSTATS_POSITION_FILE:
+	INCOMPLETE_LIST = readIncompleteQueue(deleteAfterRead=False)
 else:
 	INCOMPLETE_LIST = readIncompleteQueue()
-	
+
 s3conn = boto.connect_s3(SRC_AWS_ACCESS_KEY, SRC_AWS_SECRET_KEY)
 bucket = s3conn.get_bucket(SRC_PATH[:SRC_PATH.index('/')])
 for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'): 
@@ -262,10 +282,17 @@ for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'):
 	for month in bucket.list(prefix=year.name, delimiter='/'):
 		monthint = month.name[-3:-1]
 		for day in bucket.list(prefix=month.name, delimiter='/'):
-			digitsum = sum(c.isdigit() for c in day.name)
+			testdirname = ""
+			if day.name.endswith('/'):
+				testdirname = day.name[len(day.name)-11:-1]
+			else:
+				testdirname = day.name[len(day.name)-11:-1]
+			digitsum = sum(c.isdigit() for c in testdirname)
 			if digitsum != 8:
+				sys.exit(0)
 				#first directory... no files in it
 				continue
+			sys.exit(0)
 			dirlist = list()
 			dayint = day.name[-3:-1]
 			srcdir = day.name
@@ -277,8 +304,12 @@ for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'):
 					continue
 				elif endmatchdir is not False:
 					currentprocdate = datetime.datetime.strptime("%s%s%s"%(monthint,dayint,yearint), "%m%d%Y").date()
-					if not startdate <= currentprocdate <= enddate:
-						continue
+					if USE_AWSTATS_POSITION_FILE:
+						if not startdate <= currentprocdate < enddate:
+							continue
+					else:
+						if not startdate <= currentprocdate <= enddate:
+							continue
 			for fileWithPath in bucket.list(prefix=srcdir, delimiter='/'):
 				fname = fileWithPath.name.split('/')[-1]
 				dirlist.append(fname)
