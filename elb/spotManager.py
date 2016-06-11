@@ -357,14 +357,15 @@ def do_listmismatchedlocks():
 	reqs = getSpotRequests(conn)
 
 	for item in reqs["active"]:
-		instanceWorkDir = getRunningTaskOnInstance(item["instance"], conn)
+		instanceWorkDir = getRunningTaskOnInstance(item["instance"], conn)# in YYYY/MM/DD/
 		for lock in locks:
 			parts = lock.split("~")
-			lockfilepath = parts[0]
+			lockfilepath = parts[0]# in MM/DD/YYYY/
+			lockfilepathmatched = "%s/%s/%s/" % (lockfilepath[6:10],lockfilepath[:2],lockfilepath[3:5])
 			instanceid = parts[1].strip()
 			if item["instance"] in instanceid:
-				if lockfilepath.strip().lower() in instanceWorkDir.strip().lower():
-					print("INFO: Instance \"%s\" stated work directory matches the lock file on S3")
+				if lockfilepathmatched.strip().lower() in instanceWorkDir.strip().lower():
+					print("INFO: Instance \"%s\" stated work directory \"%s\" matches the lock file on S3" % (instanceid,instanceWorkDir.strip()))
 				else:
 					print("WARN: Mismatch for instance \"%s\", instance reports lock on \"%s\" but the lock file there reports \"%s\" has the lock" % (item["instance"],instanceWorkDir,instanceid))
 	
@@ -417,12 +418,17 @@ def do_listorphanedlocks():
 	locks = getLocks()
 	conn = boto.ec2.connect_to_region(EC2_REGION, aws_access_key_id=EC2_AWS_ACCESS_KEY, aws_secret_access_key=EC2_AWS_SECRET_KEY)
 	reqs = getSpotRequests(conn)
-	for item in reqs["active"]:
-		instanceid = item["instance"]
-		if instanceid.strip() not in locks:
-			parts = lock.split("~")
-			lockfilepath = parts[0]
-			instanceidlockfile = parts[1]
+	for lock in locks:
+		parts = lock.split("~")
+		lockfilepath = parts[0]
+		instanceidlockfile = parts[1]
+		ok = False
+		for item in reqs["active"]:
+			instanceid = item["instance"]
+			if instanceid.strip() in instanceidlockfile:
+				ok = True
+				break
+		if not ok:
 			if CMD1:
 				print("INFO: Lock on directory \"%s\" didn't have a running, matching instance, deleting the lock now" % lockfilepath)
 				releaseLock(lockfilepath)
