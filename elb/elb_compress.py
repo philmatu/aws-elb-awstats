@@ -255,7 +255,12 @@ def updateStatusFile(completedFile, completionListVerify=None):
 				if len(line) < 1:
 					print("Warn: blank line in status file detected... this isn't normal but can be handled gracefully")
 					continue#ignore blank lines, although this is abnormal
-				if line not in awss3dirlist[dldir]:
+				tmpnotin = False
+				for item in awss3dirlist[dldir]:
+					if line in item:
+						tmpnotin = True
+						break
+				if not tmpnotin:
 					if PROCESSING_STATUS_FILE_COMPLETE_TXT in line:
 						#if we manage to get this far with a complete status file, don't rewrite the data into it
 						print("The directory \"%s\" was already completed, not sure how we got here, but it's ok, I'll end processing now."%completedFile)

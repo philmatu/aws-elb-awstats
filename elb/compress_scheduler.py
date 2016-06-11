@@ -352,7 +352,7 @@ for year in bucket.list(prefix=SRC_PATH[SRC_PATH.index('/')+1:], delimiter='/'):
 for task in INCOMPLETE_LIST:
 	if task not in ENQUEUED_TASKS:
 		if INCOMPLETE_DEL:
-			enQueueNonCompletedDirectory(task)
+			enQueueNonCompletedDirectory("%s/"%task)
 		if matchdir is False:
 			print("WARNING: The task \"%s\" wasn't queued for reprocessing, yet it failed on a worker... Please manually verify!" % task)
 	else:
