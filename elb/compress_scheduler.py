@@ -101,6 +101,7 @@ QUEUE_AWS_ACCESS_KEY = CONFIG.get('main', 'QUEUE_AWS_ACCESS_KEY')
 QUEUE_AWS_SECRET_KEY = CONFIG.get('main', 'QUEUE_AWS_SECRET_KEY')
 AWSTATS_LAST_ADDED_FILE = CONFIG.get('main', 'AWSTATS_LAST_ADDED_FILE')
 
+PREVQUEUEITEMS = set()
 #SQS allows max string length of 256KB, in my case, the max is around 50KB which is sufficient for our needs
 def enqueue(dstdir, tasks):
 	qconn = boto.sqs.connect_to_region("us-east-1", aws_access_key_id=QUEUE_AWS_ACCESS_KEY, aws_secret_access_key=QUEUE_AWS_SECRET_KEY)
@@ -108,14 +109,30 @@ def enqueue(dstdir, tasks):
 	if logProcQueue is None:
 		print ("Creating SQS Queue: %s with Key %s" % (QUEUE_NAME,QUEUE_AWS_ACCESS_KEY))
 		logProcQueue = qconn.create_queue(QUEUE_NAME)
+	
 	data_out = {}
 	data_out['directory'] = "%s/" % dstdir
 	data_out['tasklist'] = tasks
-	json_tasks = json.dumps(data_out)
-	queuemessage = Message()
-	queuemessage.set_body(json_tasks)
-	print("Enqueing Task %s" % data_out['directory'])
-	logProcQueue.write(queuemessage)
+	
+	#get all the previous tasks in teh queue already to ensure no duplicates, then readd them
+	messages = logProcQueue.get_messages(visibility_timeout=30, wait_time_seconds=2, num_messages=10)
+	while len(messages) > 0:
+		for message in messages:
+			raw_json = message.get_body()
+			data = json.loads(raw_json)
+			if len(data['directory']) > 0:
+				PREVQUEUEITEMS.add(data['directory'])
+		messages = logProcQueue.get_messages(visibility_timeout=30, wait_time_seconds=2, num_messages=10)#continue reading
+	
+	if data_out['directory'] in PREVQUEUEITEMS:
+		print("The directory \"%s\" is already in the processing queue, skipping" % data_out['directory'])
+	else:
+		json_tasks = json.dumps(data_out)
+		queuemessage = Message()
+		queuemessage.set_body(json_tasks)
+		print("Enqueing Task %s" % data_out['directory'])
+		logProcQueue.write(queuemessage)
+	
 	qconn.close()
 
 #destination directory of the remote server, and the files that should be there (plus the status file)
@@ -357,4 +374,5 @@ for task in INCOMPLETE_LIST:
 			print("WARNING: The task \"%s\" wasn't queued for reprocessing, yet it failed on a worker... Please manually verify!" % task)
 	else:
 		print("info: The task \"%s\" was queued for reprocessing... it previously failed on a worker node." % task)
+print("Please kindly wait 30 seconds before reexecuting this script, the queue needs to restore itself.")
 s3conn.close()
