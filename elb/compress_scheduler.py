@@ -283,6 +283,9 @@ if USE_AWSTATS_POSITION_FILE:
 					matchdir = "%s/%s/%s" % (sy,sm,sd)
 					enddate = datetime.datetime.strptime(todaysdate, "%Y/%m/%d/").date()
 					endmatchdir = enddate.strftime('%Y/%m/%d')
+	else:
+		print("The AWStats file %s doesn't exist, make sure you've actually run the awstats updater first with a fresh processed batch.")
+		sys.exit(0)
 
 INCOMPLETE_LIST = list()
 if endmatchdir is False and matchdir is not False:
