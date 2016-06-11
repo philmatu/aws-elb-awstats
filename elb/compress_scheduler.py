@@ -9,6 +9,24 @@ Directories are then scheduled via Amazon's Queue Service
 This script works across AWS accounts
 ***
 
+Usage:
+./compress_scheduler.py <configfile> [<date_to_process/startAt_in_MMDDYYYY/or_\"FILE\"_toUseAWStatsStatusFileDate> <date_to_end_at_if_intended>]
+
+ex:
+schedule everything that is ready for processing and wasn't already processed:
+python3 compress_scheduler.py config.ini 
+
+schedule only May 1, 2016
+python3 compress_scheduler.py config.ini 05012016
+
+schedule all files that aren't done between May 1, 2016 and May 10, 2016 (including this date)
+python3 compress_scheduler.py config.ini 05012016 05102016
+
+schedule all files that can be processed by awstats
+python3 compress_scheduler.py config.ini file
+
+schedule 
+
 Author: Philip Matuskiewicz - philip.matuskiewicz@nyct.com       
 
 Changes:
