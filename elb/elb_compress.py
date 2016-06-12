@@ -330,7 +330,6 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 				buf = buf[CHUNK_SIZE:]
 		print("Finishing processing of log %s" % srcFileKey)
 		block = bytes(buf,'utf_8')
-		print(block)
 		compressor.write(block)
 		compressor.close()
 		outStream.seek(0)
@@ -338,8 +337,6 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 		outStream.seek(0)
 		outStream.truncate()
 		mpu.complete_upload()
-		print("PUPUP")
-	print("CLOSE")
 	with WRITE_LOCK:
 		print("Updating the status file now with %s"%dst_path_sans_GZ)
 		updateStatusFile(dst_path_sans_GZ)
