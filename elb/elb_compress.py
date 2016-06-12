@@ -395,6 +395,31 @@ def cleanURLString(line):
 	line = "%s%s%s" % (line[:ind_st],data,line[ind_end:])
 	return line
 
+#NOTE: This is highly specific to PhilMatu's needs, you may want to bypass this with returning qs_parts immediately (or customize to your needs)
+def customURLClean(qs_parts):
+	#return qs_parts #do nothing
+	latlonstore = None
+	for Key in qs_parts:
+		cskey = Key.lower()
+		if ("lineref" in cskey) or ("monitoringref" in cskey):
+			parts = qs_parts[Key].split('_')
+			qs_parts[Key] = parts[len(parts)-1]
+		if ("lat" in cskey) or ("lon" in cskey):
+			if latlonstore is None:
+				latlonstore = Key
+			else:
+				if ("lat" in cskey):
+					lat = qs_parts[Key]
+					lon = qs_parts[latlonstore]
+				else:
+					lon = qs_parts[Key]
+					lat = qs_parts[latlonstore]
+				latlonstore = "%s_%s"%(lat,lon)
+	if latlonstore is not None:
+		qs_parts["CustAWStatsLocation"] = latlonstore
+	return qs_parts
+
+
 def clean(line):
 	line = line.strip()
 	if len(line) < 20:
@@ -446,6 +471,7 @@ def clean(line):
 		for removeKey in REMOVE_QUERY_STRING_KEYS:
 			if removeKey in qs_parts:
 				del qs_parts[removeKey]
+		qs_parts = customURLClean(qs_parts)
 		qs[4] = urlencode(qs_parts)
 		new_method = urlunparse(qs)
 		methodurl_stripped = "%s %s %s" % (url_parts[0], new_method, url_parts[2])
