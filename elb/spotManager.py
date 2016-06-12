@@ -68,7 +68,8 @@ if len(sys.argv) == 3 or len(sys.argv) == 4 or len(sys.argv) == 5 or len(sys.arg
 			CMD1 = c #will be an AWS instance ID to delete
 		elif c.replace(".","").isdigit():
 			CMD1 = float(str(sys.argv[3]).strip())
-			CMD2 = str(sys.argv[4]).strip()
+			if len(sys.argv) > 4:
+				CMD2 = str(sys.argv[4]).strip()
 		else:
 			print("The parameters weren't good, try again")
 			sys.exit(0)
@@ -436,7 +437,7 @@ def do_listorphanedlocks():
 
 #NOTE: might be a good idea to only allow lock delete if it is not associated with a running instance, otherwise make force option
 def do_deletelock():
-	if CMD1.isdigit():
+	if str(CMD1).isdigit():
 		#MMDDYYYY
 		m = CMD1[:2]
 		d = CMD1[2:4]
