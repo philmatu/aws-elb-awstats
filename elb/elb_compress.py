@@ -22,6 +22,7 @@ Changes:
 	6/9/16 - Added web directory updates
 '''
 
+import syslog
 import sys
 import os
 import signal
@@ -312,6 +313,7 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 			try:
 				cleanedString = clean(line)
 			except: 
+				syslog.syslog(syslog.LOG_ERR, "AWSTATSPARSE EXCEPTION THROWN with line %s"%line)
 				print("EXCEPTION THROWN with line %s"%line)
 				os.system('kill $PPID')
 			logcount = logcount + 1
