@@ -365,17 +365,14 @@ def splitIPV6Ports(line):
 	if ":" in parts[5]:
 		subparts = parts[5].rsplit(":", 1)
 		if isIPV6(subparts[0]) and (len(subparts) > 1):
-			print("2HERE")
 			return line.replace(parts[5], "%s %s" % (subparts[0], subparts[1]))
 	elif ":" in parts[4]:
 		subparts = parts[4].rsplit(":", 1)
 		if isIPV6(subparts[0]) and (len(subparts) > 1):
-			print("1HERE")
 			return line.replace(parts[4], "%s %s" % (subparts[0], subparts[1]))
 	elif ":" in parts[3]:
 		subparts = parts[3].rsplit(":", 1)
 		if isIPV6(subparts[0]) and (len(subparts) > 1):
-			print("HERE")
 			return line.replace(parts[3], "%s %s" % (subparts[0], subparts[1]))
 	return line
 
