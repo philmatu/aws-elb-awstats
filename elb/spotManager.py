@@ -437,7 +437,8 @@ def do_listorphanedlocks():
 
 #NOTE: might be a good idea to only allow lock delete if it is not associated with a running instance, otherwise make force option
 def do_deletelock():
-	if str(CMD1).isdigit():
+	CMD1 = str(sys.argv[3])
+	if CMD1.isdigit():
 		#MMDDYYYY
 		m = CMD1[:2]
 		d = CMD1[2:4]
