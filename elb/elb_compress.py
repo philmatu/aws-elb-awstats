@@ -328,15 +328,18 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 					outStream.truncate()
 					part = part + 1
 				buf = buf[CHUNK_SIZE:]
-	print("Finishing processing of log %s" % srcFileKey)
-	if(len(buf) > 0):
-		block = bytes(buf[:CHUNK_SIZE],'utf_8')
-		#write compressed out as binary data
+		print("Finishing processing of log %s" % srcFileKey)
+		block = bytes(buf,'utf_8')
+		print(block)
 		compressor.write(block)
+		compressor.close()
 		outStream.seek(0)
 		mpu.upload_part_from_file(outStream, part)
-	compressor.close()
-	mpu.complete_upload()#always complete upload regardless if there is remaining unwritten data or not
+		outStream.seek(0)
+		outStream.truncate()
+		mpu.complete_upload()
+		print("PUPUP")
+	print("CLOSE")
 	with WRITE_LOCK:
 		print("Updating the status file now with %s"%dst_path_sans_GZ)
 		updateStatusFile(dst_path_sans_GZ)
