@@ -309,7 +309,11 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 	with smart_open.smart_open(srcFileKey) as srcStream:
 		for line in srcStream:
 			line = bytes(line).decode('UTF-8')
-			cleanedString = clean(line)
+			try:
+				cleanedString = clean(line)
+			except: 
+				print("EXCEPTION THROWN with line %s"%line)
+				os.system('kill $PPID')
 			logcount = logcount + 1
 			if logcount > 10000:
 				print ("10000 more Log entries processed...")
@@ -398,10 +402,10 @@ def customURLClean(qs_parts):
 	latlonstore = None
 	for Key in qs_parts:
 		cskey = Key.lower()
-		if ("lineref" in cskey) or ("monitoringref" in cskey):
+		if (cskey in "lineref") or (cskey in "monitoringref"):
 			parts = qs_parts[Key].split('_')
 			qs_parts[Key] = parts[len(parts)-1]
-		if ("lat" in cskey) or ("lon" in cskey):
+		if (cskey in "lat") or (cskey in "lon"):
 			if latlonstore is None:
 				latlonstore = Key
 			else:
@@ -565,11 +569,15 @@ while True:
 	
 	if createLock(DIRECTORY):
 		if not directoryAlreadyCompleted(DIRECTORY):
+			#sequential order (errors will print clearly)
+			#for task in tasks:
+			#	compress(task)
+			#threaded mode
 			with concurrent.futures.ProcessPoolExecutor() as executor:
 				executor.map(compress, tasks)
 			with WRITE_LOCK:
 				src_path = "%s%s" % (DST_PATH.split("/", 1)[1], DIRECTORY)
-				updateStatusFile(src_path, tasks) #completion is here if all checks out... we assume that the scheduler's queue has all the tasks for a day in this list
+				updateStatusFile(src_path, tasks) #completion is here if all checks out... we assume that the scheduler has all the tasks for a day in this list
 		else:
 			print("The directory \"%s\" is already completed (marked in status file)" % DIRECTORY)
 		releaseLock(DIRECTORY)
