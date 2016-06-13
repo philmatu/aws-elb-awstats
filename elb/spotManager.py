@@ -166,6 +166,7 @@ def getSpotRequests(conn): # connection is connect_to_region of 3c2
 	state_open = list()
 	state_active = list()
 	state_cancelled = list()
+	state_closed = list()
 	for r in req:
 		if r.launch_specification is not None:
 			if EC2_WORKER_AMI.lower().strip() not in str(r.launch_specification).lower():
@@ -181,6 +182,7 @@ def getSpotRequests(conn): # connection is connect_to_region of 3c2
 			continue
 		elif "closed" in r.state:
 			print("The spot request %s was closed... you should cancel it" % r.id)
+			state_closed.append({"instance":r.instance_id,"spotid":r.id})
 			continue
 		elif "cancelled" in r.state:
 			if r.instance_id is not None:
@@ -191,7 +193,7 @@ def getSpotRequests(conn): # connection is connect_to_region of 3c2
 			continue
 		else:
 			continue
-	return {"open":state_open, "active": state_active, "cancelled": state_cancelled}
+	return {"open":state_open, "active": state_active, "cancelled": state_cancelled, "closed": state_closed}
 
 #pass in the instance id to get the IP address of the instance
 def getDNSFromInstanceID(instanceid, ec2connection):
@@ -335,12 +337,18 @@ def do_listorphanedinstances():
 			cancelSpotRequest(conn, item)
 		else:
 			out.append("-- SpotID: \"%s\" InstanceID: \"%s\" InstanceDNSNAME: \"%s\"" % (item["spotid"],item["instance"],instanceIP))
-	out.append("\nCanceled Spot Requests with running instances, you should probably cancel these (this is likely a manual execution)!")
+	out.append("\nCanceled Spot Requests with running instances, you should probably cancel these (via delete) (this is likely a manual execution)!")
 	for item in reqs["cancelled"]:
 		instanceIP = getDNSFromInstanceID(item["instance"], conn)
 		instanceWorkDir = getRunningTaskOnInstance(item["instance"], conn)
 		if len(instanceWorkDir) > 1:
 			continue
+		if CMD1:
+			cancelSpotRequest(conn, item)
+		else:
+			out.append("-- SpotID: \"%s\" InstanceID: \"%s\" WorkingOn (based on instance data): \"%s\" InstanceDNSName: \"%s\"" % (item["spotid"],item["instance"],instanceWorkDir,instanceIP))
+	out.append("\nClosed spot requests (by amazon price outbid), you should probably cancel these (via delete) (this is likely a manual execution)!")
+	for item in reqs["closed"]:
 		if CMD1:
 			cancelSpotRequest(conn, item)
 		else:
