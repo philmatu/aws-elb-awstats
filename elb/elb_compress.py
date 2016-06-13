@@ -441,7 +441,7 @@ def customURLClean(qs_parts):
 					lat = qs_parts[latlonstore]
 				latlonstore = "%s_%s"%(lat,lon)
 		if (cskey in "l") and ("l" in cskey):
-			lstore = qs_parts[Key]
+			lstore = qs_parts[Key].replace(",", "_")
 		
 	if latlonstore is not None:
 		qs_parts["CustAWStatsLocation"] = latlonstore
