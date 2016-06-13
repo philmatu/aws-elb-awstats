@@ -423,12 +423,13 @@ def cleanURLString(line):
 def customURLClean(qs_parts):
 	#return qs_parts #do nothing
 	latlonstore = None
+	lstore = None #handles mobile location input
 	for Key in qs_parts:
 		cskey = Key.lower()
 		if (cskey in "lineref") or (cskey in "monitoringref"):
 			parts = qs_parts[Key].split('_')
 			qs_parts[Key] = parts[len(parts)-1]
-		if (cskey in "lat") or (cskey in "lon"):
+		if (cskey in "lat" and "lat" in cskey) or (cskey in "lon" and "lon" in cskey):
 			if latlonstore is None:
 				latlonstore = Key
 			else:
@@ -439,10 +440,15 @@ def customURLClean(qs_parts):
 					lon = qs_parts[Key]
 					lat = qs_parts[latlonstore]
 				latlonstore = "%s_%s"%(lat,lon)
+		if (cskey in "l") and ("l" in cskey):
+			lstore = qs_parts[Key]
+		
 	if latlonstore is not None:
 		qs_parts["CustAWStatsLocation"] = latlonstore
+	elif lstore is not None:	
+		qs_parts["CustAWStatsLocation"] = lstore
+		
 	return qs_parts
-
 
 def clean(line):
 	line = line.strip()
@@ -498,7 +504,7 @@ def clean(line):
 		qs_parts = customURLClean(qs_parts)
 		qs[4] = urlencode(qs_parts)
 		new_method = urlunparse(qs)
-		methodurl_stripped = "%s %s %s" % (url_parts[0], new_method, url_parts[2])
+		methodurl_stripped = "%s %s %s" % (url_parts[0], new_method.replace("%2C",",").replace("%2c",","), url_parts[2])
 	finalLine = "%s %s %s %s %s %s %s \"%s\" \"%s\" %s" % (line[0], line[1], line[3], line[4], line[8], line[11], line[13], methodurl_stripped, line[15], line[16])
 	return finalLine
 
