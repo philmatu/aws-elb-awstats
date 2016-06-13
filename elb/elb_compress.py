@@ -504,7 +504,7 @@ def clean(line):
 		qs_parts = customURLClean(qs_parts)
 		qs[4] = urlencode(qs_parts)
 		new_method = urlunparse(qs)
-		methodurl_stripped = "%s %s %s" % (url_parts[0], new_method.replace("%2C",",").replace("%2c",","), url_parts[2])
+		methodurl_stripped = "%s %s %s" % (url_parts[0], new_method.replace("%2C",",").replace("%2c",",").replace("%252C", ",").replace("%252c", ","), url_parts[2])
 	finalLine = "%s %s %s %s %s %s %s \"%s\" \"%s\" %s" % (line[0], line[1], line[3], line[4], line[8], line[11], line[13], methodurl_stripped, line[15], line[16])
 	return finalLine
 
