@@ -269,6 +269,7 @@ def validateStatusFile(completedFile, completionListVerify=None):
 		print ("All files that were queued by scheduler are finished and in status file, appending completion text now for the next pipeline step, directory is %s" % completedFile)
 		new_status_file_text = "%s\n%s" % (PROCESSING_STATUS_FILE_COMPLETE_TXT,status_file_text)
 		status_file_key.set_contents_from_string(new_status_file_text)
+	dst_s3conn.close()
 		
 def updateStatusFile(completedFile):
 	dst_s3conn = boto.connect_s3(DST_AWS_ACCESS_KEY, DST_AWS_SECRET_KEY)
@@ -303,12 +304,13 @@ def updateStatusFile(completedFile):
 	else:
 		print("The file \"%s\" didn't get outputted to the status file, trying again")
 		updateStatusFile(completedFile)
+	dst_s3conn.close()
 
 def compress(src): #takes in a filename that is in the SRCPATH directory and places a compressed/gzipped version into DSTPATH
 	#create signal for subprocess
 	signal.signal(signal.SIGINT, handle_SIGINT_THREADS)
 	if len(src) < 15:
-		return
+		return False
 	src_s3conn = boto.connect_s3(SRC_AWS_ACCESS_KEY, SRC_AWS_SECRET_KEY)
 	src_bucket = src_s3conn.get_bucket(SRC_PATH[:SRC_PATH.index('/')])
 	src_path = "%s%s%s" % (SRC_PATH.split("/", 1)[1], DIRECTORY, src)
@@ -322,7 +324,7 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 
 	if isAlreadyInStatusFile(dst_path_sans_GZ):
 		print("The file %s is already in the status file, meaning it should be done... skipping" % dst_path_sans_GZ)
-		return
+		return False
 
 	print("Compressing the file %s" % src)
 
@@ -367,9 +369,7 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 		outStream.seek(0)
 		outStream.truncate()
 		mpu.complete_upload()
-	with WRITE_LOCK:
-		print("Updating the status file now with %s"%dst_path_sans_GZ)
-		updateStatusFile(dst_path_sans_GZ)
+	return dst_path_sans_GZ
 
 def isIPV6(addr):
 	try:
@@ -597,7 +597,11 @@ while True:
 			#	compress(task)
 			#threaded mode
 			with concurrent.futures.ProcessPoolExecutor() as executor:
-				executor.map(compress, tasks)
+				results = executor.map(compress, tasks)
+				for value in results:
+					with WRITE_LOCK:
+						print("Updating the status file now in the parent process with %s"%value)
+						updateStatusFile(value)
 			with WRITE_LOCK:
 				src_path = "%s%s" % (DST_PATH.split("/", 1)[1], DIRECTORY)
 				validateStatusFile(src_path, tasks) #completion is here if all checks out... we assume that the scheduler has all the tasks for a day in this list
