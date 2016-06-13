@@ -226,13 +226,12 @@ def getDirectoryList(key,sec,inpath,d=None):
 	return out
 
 #the completedFile doesn't have a .gz, even though we know all files here should end in GZ, this is handled by the scheduler
-def updateStatusFile(completedFile, completionListVerify=None):
+def validateStatusFile(completedFile, completionListVerify=None):
 	dst_s3conn = boto.connect_s3(DST_AWS_ACCESS_KEY, DST_AWS_SECRET_KEY)
 	dst_bucket = dst_s3conn.get_bucket(DST_PATH[:DST_PATH.index('/')])
 	status_file_path = "%s/%s" % (completedFile.rsplit('/', 1)[0],PROCESSING_STATUS_FILE)
 	status_file_key = Key(dst_bucket, status_file_path)
 	theCompletedFile = completedFile.rsplit('/', 1)[1].strip()
-	
 	if not status_file_key.exists():
 		if len(completionListVerify) > 0:
 			print("Seeking Verification for %s, but this directory has no status file... rerun scheduler to delete / restart processing please.  I'll end now on this directory" % completedFile)
@@ -240,45 +239,70 @@ def updateStatusFile(completedFile, completionListVerify=None):
 		print ("WARN: failed to retrieve file \"%s\", starting new key." % status_file_path)
 		status_file_key.set_contents_from_string(theCompletedFile)
 	else:
+		#make sure that everything we were going to complete is in the status file
 		status_file_text = bytes(status_file_key.get_contents_as_string()).decode(encoding='UTF-8')
-		#everything has been done if we hvae a completionList object, so validate this
-		if completionListVerify is not None:
-			#make sure that everything we were going to complete is in the status file
-			for line in completionListVerify:
-				if line not in status_file_text.split("\n"):
-					print("The task \"%s\" isn't in the status file, this means I didn't complete successfully... I will notify the scheduler queue of my directory: %s" % (line,completedFile))
-					enQueueNonCompletedDirectory(DIRECTORY)#string in YYYY/MM/DD from the original queue
+		for line in completionListVerify:
+			if line not in status_file_text.split("\n"):
+				print("The task \"%s\" isn't in the status file, this means I didn't complete successfully... I will notify the scheduler queue of my directory: %s" % (line,completedFile))
+				enQueueNonCompletedDirectory(DIRECTORY)#string in YYYY/MM/DD from the original queue
+				return
+		#make sure every line of the status file has a file in the directory
+		dldir = completedFile.split('/', 1)[1]
+		awss3dirlist = getDirectoryList(key=DST_AWS_ACCESS_KEY,sec=DST_AWS_SECRET_KEY,inpath=DST_PATH,d=dldir)
+		for line in status_file_text.split("\n"):
+			if len(line) < 1:
+				print("Warn: blank line in status file detected... this isn't normal but can be handled gracefully")
+				continue#ignore blank lines, although this is abnormal
+			tmpnotin = False
+			for item in awss3dirlist[dldir]:
+				if line in item:
+					tmpnotin = True
+					break
+			if not tmpnotin:
+				if PROCESSING_STATUS_FILE_COMPLETE_TXT in line:
+					#if we manage to get this far with a complete status file, don't rewrite the data into it
+					print("The directory \"%s\" was already completed, not sure how we got here, but it's ok, I'll end processing now."%completedFile)
 					return
-			#make sure every line of the status file has a file in the directory
-			dldir = completedFile.split('/', 1)[1]
-			awss3dirlist = getDirectoryList(key=DST_AWS_ACCESS_KEY,sec=DST_AWS_SECRET_KEY,inpath=DST_PATH,d=dldir)
-			for line in status_file_text.split("\n"):
-				if len(line) < 1:
-					print("Warn: blank line in status file detected... this isn't normal but can be handled gracefully")
-					continue#ignore blank lines, although this is abnormal
-				tmpnotin = False
-				for item in awss3dirlist[dldir]:
-					if line in item:
-						tmpnotin = True
-						break
-				if not tmpnotin:
-					if PROCESSING_STATUS_FILE_COMPLETE_TXT in line:
-						#if we manage to get this far with a complete status file, don't rewrite the data into it
-						print("The directory \"%s\" was already completed, not sure how we got here, but it's ok, I'll end processing now."%completedFile)
-						return
-					print("The line \"%s\" was not found in the list of tasks, this means I didn't complete successfully... I will notify the scheduler queue of my directory: %s" % (line,completedFile))
-					enQueueNonCompletedDirectory(DIRECTORY)#string in YYYY/MM/DD from the original queue
-					return
-			print ("All files that were queued by scheduler are finished and in status file, appending completion text now for the next pipeline step, directory is %s" % completedFile)
-			new_status_file_text = "%s\n%s" % (PROCESSING_STATUS_FILE_COMPLETE_TXT,status_file_text)
-			status_file_key.set_contents_from_string(new_status_file_text)
+				print("The line \"%s\" was not found in the list of tasks, this means I didn't complete successfully... I will notify the scheduler queue of my directory: %s" % (line,completedFile))
+				enQueueNonCompletedDirectory(DIRECTORY)#string in YYYY/MM/DD from the original queue
+				return
+		print ("All files that were queued by scheduler are finished and in status file, appending completion text now for the next pipeline step, directory is %s" % completedFile)
+		new_status_file_text = "%s\n%s" % (PROCESSING_STATUS_FILE_COMPLETE_TXT,status_file_text)
+		status_file_key.set_contents_from_string(new_status_file_text)
+		
+def updateStatusFile(completedFile):
+	dst_s3conn = boto.connect_s3(DST_AWS_ACCESS_KEY, DST_AWS_SECRET_KEY)
+	dst_bucket = dst_s3conn.get_bucket(DST_PATH[:DST_PATH.index('/')])
+	status_file_path = "%s/%s" % (completedFile.rsplit('/', 1)[0],PROCESSING_STATUS_FILE)
+	status_file_key = Key(dst_bucket, status_file_path)
+	theCompletedFile = completedFile.rsplit('/', 1)[1].strip()
+
+	try:	
+		if not status_file_key.exists():
+			if len(completionListVerify) > 0:
+				print("Seeking Verification for %s, but this directory has no status file... rerun scheduler to delete / restart processing please.  I'll end now on this directory" % completedFile)
+				return
+			print ("WARN: failed to retrieve file \"%s\", starting new key." % status_file_path)
+			status_file_key.set_contents_from_string(theCompletedFile)
 		else:
+			status_file_text = bytes(status_file_key.get_contents_as_string()).decode(encoding='UTF-8')
+			#everything has been done if we hvae a completionList object, so validate this
 			if len(status_file_text) < 3:
 				new_status_file_text = theCompletedFile
 			else:
 				new_status_file_text = "%s\n%s" % (status_file_text, theCompletedFile)
 			status_file_key.set_contents_from_string(new_status_file_text)
-	print("Updated Status file with latest data, file %s" % theCompletedFile)
+		print("Updated Status file with latest data, file %s" % theCompletedFile)
+	except:
+		print("Exception trying to update Status file with dir \"%s\", trying again" % completedFile)
+		updateStatusFile(completedFile)
+	#validate status file contents
+	status_file_text = bytes(status_file_key.get_contents_as_string()).decode(encoding='UTF-8')
+	if theCompletedFile in status_file_text:
+		return
+	else:
+		print("The file \"%s\" didn't get outputted to the status file, trying again")
+		updateStatusFile(completedFile)
 
 def compress(src): #takes in a filename that is in the SRCPATH directory and places a compressed/gzipped version into DSTPATH
 	#create signal for subprocess
@@ -576,7 +600,7 @@ while True:
 				executor.map(compress, tasks)
 			with WRITE_LOCK:
 				src_path = "%s%s" % (DST_PATH.split("/", 1)[1], DIRECTORY)
-				updateStatusFile(src_path, tasks) #completion is here if all checks out... we assume that the scheduler has all the tasks for a day in this list
+				validateStatusFile(src_path, tasks) #completion is here if all checks out... we assume that the scheduler has all the tasks for a day in this list
 		else:
 			print("The directory \"%s\" is already completed (marked in status file)" % DIRECTORY)
 		releaseLock(DIRECTORY)
