@@ -150,8 +150,9 @@ if (START_MONTH is not False) and (START_PROCESS is False):
 		print("Handling command parameters for SINGLE MONTH, entry in YYYYMM is %s, starting here"%sd)
 else:
 	if START_PROCESS is not False:
-		sd = START_PROCESS #start from the point left off at
-		print("Starting ONE DAY after the day in YYYYMMDD %s" %sd)
+		nextday = datetime.datetime.strptime(START_PROCESS, "%Y%m%d").date() + datetime.timedelta(days=1)
+		sd = nextday.strftime('%Y%m%d') #start from the point left off at
+		print("Starting at next day (from already processed file), which is YYYYMMDD %s" %sd)
 	else:
 		#start from the beginning
 		print("Starting from the earliest date we see on S3")
