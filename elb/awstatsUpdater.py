@@ -196,7 +196,10 @@ for year in bucket.list(prefix=DST_PATH[DST_PATH.index('/')+1:], delimiter='/'):
 			if MONTH_ONLY:
 				if monthkey not in START_MONTH:
 					continue #don't process anything outside of this month
-			
+			if SAME_DAY:
+				if sd not in dirkey:
+					continue
+	
 			#get directory listing of files (except status file and lock file)
 			files = list()
 			allowed = False
@@ -229,12 +232,12 @@ for year in bucket.list(prefix=DST_PATH[DST_PATH.index('/')+1:], delimiter='/'):
 				work[procdate] = items
 			
 			#if there is a start date specified somewhere, make sure to adhere to it -> now
-			if MONTH_ONLY or SAME_DAY:
+			if sd is not False:
 				if startdate <= procdate <= enddate:
 					work[procdate] = items
 			else:
-				if startdate < procdate <= enddate:
-					work[procdate] = items
+				#processing everything...
+				work[procdate] = items
 
 mypythonscript = os.path.realpath(__file__)
 mypath = mypythonscript[:mypythonscript.rindex('/')]
