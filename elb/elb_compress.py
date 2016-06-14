@@ -22,6 +22,7 @@ Changes:
 	6/9/16 - Added web directory updates
 '''
 
+import traceback
 import syslog
 import sys
 import os
@@ -337,14 +338,15 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 		for line in srcStream:
 			try:
 				line = bytes(line).decode('UTF-8')
-			except e:
-				print(e)
+			except Error as e:
+				traceback.print_exc()
 				print("UNICODE EXCEPTION THROWN with line %s in file %s"%(line,srcFileKey))
 				syslog.syslog(syslog.LOG_ERR, "Unicode AWStatPARSE EXCEPTION THROWN with line %s, file %s"%(line,srcFileKey))
 				os.system('kill $PPID')
 			try:
 				cleanedString = clean(line)
 			except: 
+				traceback.print_exc()
 				syslog.syslog(syslog.LOG_ERR, "AWSTATSPARSE EXCEPTION THROWN with line %s, file %s"%(line,srcFileKey))
 				print("PARSE EXCEPTION THROWN with line %s in file %s"%(line,srcFileKey))
 				os.system('kill $PPID')
