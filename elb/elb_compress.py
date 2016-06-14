@@ -334,45 +334,52 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 	outStream = BytesIO()
 	compressor = gzip.GzipFile(fileobj=outStream, mode='wb')
 	logcount = 0
-	with smart_open.smart_open(srcFileKey) as srcStream:
-		for line in srcStream:
-			#simply  delete any bad characters, could be utf16-le, but we don't really need to save these characters
-			line = bytes(line).decode('utf-8', errors='ignore')
-			try:
-				cleanedString = clean(line)
-			except: 
-				traceback.print_exc()
-				syslog.syslog(syslog.LOG_ERR, "AWSTATSPARSE EXCEPTION THROWN with line %s, file %s"%(line,srcFileKey))
-				print("PARSE EXCEPTION THROWN with line %s in file %s"%(line,srcFileKey))
-				os.system('kill $PPID')
-			logcount = logcount + 1
-			if logcount > 10000:
-				print ("10000 more Log entries processed...")
-				logcount = 0
-			if len(cleanedString) < 1:
-				continue
-			buf = "%s%s\n" % (buf, cleanedString)
-			while(len(buf) > CHUNK_SIZE):
-				block = bytes(buf[:CHUNK_SIZE],'utf_8')
-				#write compressed out as binary data
-				compressor.write(block)
-				if outStream.tell() > 10<<20:  # min size for multipart upload is 5242880
-					outStream.seek(0)
-					mpu.upload_part_from_file(outStream, part)
-					outStream.seek(0)
-					outStream.truncate()
-					part = part + 1
-				buf = buf[CHUNK_SIZE:]
-		print("Finishing processing of log %s" % srcFileKey)
-		block = bytes(buf,'utf_8')
-		compressor.write(block)
-		compressor.close()
-		outStream.seek(0)
-		mpu.upload_part_from_file(outStream, part)
-		outStream.seek(0)
-		outStream.truncate()
-		mpu.complete_upload()
-	return dst_path_sans_GZ
+	try:
+		with smart_open.smart_open(srcFileKey) as srcStream:
+			for line in srcStream:
+				#simply  delete any bad characters, could be utf16-le, but we don't really need to save these characters
+				line = bytes(line).decode('utf-8', errors='ignore')
+				try:
+					cleanedString = clean(line)
+				except: 
+					traceback.print_exc()
+					syslog.syslog(syslog.LOG_ERR, "AWSTATSPARSE EXCEPTION THROWN with line %s, file %s"%(line,srcFileKey))
+					print("PARSE EXCEPTION THROWN with line %s in file %s"%(line,srcFileKey))
+					os.system('kill $PPID')
+				logcount = logcount + 1
+				if logcount > 10000:
+					print ("10000 more Log entries processed...")
+					logcount = 0
+				if len(cleanedString) < 1:
+					continue
+				buf = "%s%s\n" % (buf, cleanedString)
+				while(len(buf) > CHUNK_SIZE):
+					block = bytes(buf[:CHUNK_SIZE],'utf_8')
+					#write compressed out as binary data
+					compressor.write(block)
+					if outStream.tell() > 10<<20:  # min size for multipart upload is 5242880
+						outStream.seek(0)
+						mpu.upload_part_from_file(outStream, part)
+						outStream.seek(0)
+						outStream.truncate()
+						part = part + 1
+					buf = buf[CHUNK_SIZE:]
+			print("Finishing processing of log %s" % srcFileKey)
+			block = bytes(buf,'utf_8')
+			compressor.write(block)
+			compressor.close()
+			outStream.seek(0)
+			mpu.upload_part_from_file(outStream, part)
+			outStream.seek(0)
+			outStream.truncate()
+			mpu.complete_upload()
+		return dst_path_sans_GZ
+	except:
+		traceback.print_exc()
+		print("The smart_open library failed to open the file / maintain a connection")
+		#socket timed out or another read error of some type
+		return False
+		
 
 def isIPV6(addr):
 	try:
