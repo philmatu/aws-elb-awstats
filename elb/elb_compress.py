@@ -307,7 +307,7 @@ def updateStatusFile(completedFile):
 		updateStatusFile(completedFile)
 	dst_s3conn.close()
 
-def compress(src): #takes in a filename that is in the SRCPATH directory and places a compressed/gzipped version into DSTPATH
+def compress(src,is_retry=False): #takes in a filename that is in the SRCPATH directory and places a compressed/gzipped version into DSTPATH
 	#create signal for subprocess
 	signal.signal(signal.SIGINT, handle_SIGINT_THREADS)
 	if len(src) < 15:
@@ -324,6 +324,8 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 	mpu = dst_bucket.initiate_multipart_upload(dst_path)
 
 	if isAlreadyInStatusFile(dst_path_sans_GZ):
+		src_s3conn.close()
+		dst_s3conn.close()
 		print("The file %s is already in the status file, meaning it should be done... skipping" % dst_path_sans_GZ)
 		return False
 
@@ -373,13 +375,17 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 			outStream.seek(0)
 			outStream.truncate()
 			mpu.complete_upload()
+		src_s3conn.close()
+		dst_s3conn.close()
 		return dst_path_sans_GZ
 	except:
 		traceback.print_exc()
 		print("The smart_open library failed to open the file / maintain a connection")
 		#socket timed out or another read error of some type
-		return False
-		
+		if is_retry:
+			print("Already retried, giving up with %s"%src)
+			return False
+		return compress(src,is_retry=True)		
 
 def isIPV6(addr):
 	try:
