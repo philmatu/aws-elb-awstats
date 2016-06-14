@@ -572,7 +572,7 @@ def checkForTerminationThread():
 			print('URLError of some type getting spot instance termination time, error will be printed now and then more processing will happen')
 			print(e)
 		else:
-			the_termination_time = resource.read().decode('utf-8')
+			the_termination_time = spotdataresource.read().decode('utf-8')
 			print("The spot instance will terminate at %s... starting shutdown" % the_termination_time)
 			SPOT_KILL = True
 			os.system('kill $PPID')
