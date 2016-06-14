@@ -335,8 +335,8 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 	logcount = 0
 	with smart_open.smart_open(srcFileKey) as srcStream:
 		for line in srcStream:
-			line = bytes(line).decode('UTF-8')
 			try:
+				line = bytes(line).decode('UTF-8')
 				cleanedString = clean(line)
 			except: 
 				syslog.syslog(syslog.LOG_ERR, "AWSTATSPARSE EXCEPTION THROWN with line %s"%line)
