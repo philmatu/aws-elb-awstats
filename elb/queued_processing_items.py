@@ -13,7 +13,7 @@ Changes:
 import sys
 import boto
 import boto.sqs
-from boto.sqs.message import Message
+from boto.sqs.message import RawMessage
 import configparser
 import json
 

@@ -30,7 +30,7 @@ import signal
 from io import BytesIO
 import boto
 import boto.sqs
-from boto.sqs.message import Message
+from boto.sqs.message import RawMessage
 from boto.s3.key import Key
 import smart_open
 import threading
@@ -554,7 +554,7 @@ def enQueueNonCompletedDirectory(directory):
 	data_out = {}
 	data_out['directory'] = directory #in format of yyyy/mm/dd
 	json_encoded_message = json.dumps(data_out)
-	queuemessage = Message()
+	queuemessage = RawMessage()
 	queuemessage.set_body(json_encoded_message)
 	print("Enqueing Directory (YYYY/MM/DD) %s for re-scheduling and re-processing due to incomplete processing with me" % data_out['directory'])
 	logProcQueue.write(queuemessage)

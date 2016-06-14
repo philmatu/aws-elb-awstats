@@ -43,7 +43,7 @@ import os
 import boto
 import boto.sqs
 import datetime
-from boto.sqs.message import Message
+from boto.sqs.message import RawMessage
 from boto.s3.key import Key
 import configparser
 import json
@@ -128,7 +128,7 @@ def enqueue(dstdir, tasks):
 		print("The directory \"%s\" is already in the processing queue, skipping" % data_out['directory'])
 	else:
 		json_tasks = json.dumps(data_out)
-		queuemessage = Message()
+		queuemessage = RawMessage()
 		queuemessage.set_body(json_tasks)
 		print("Enqueing Task %s" % data_out['directory'])
 		logProcQueue.write(queuemessage)
@@ -272,7 +272,7 @@ def enQueueNonCompletedDirectory(directory):
 	data_out = {}
 	data_out['directory'] = directory #in format of yyyy/mm/dd
 	json_encoded_message = json.dumps(data_out)
-	queuemessage = Message()
+	queuemessage = RawMessage()
 	queuemessage.set_body(json_encoded_message)
 	print("Enqueing Directory (YYYY/MM/DD) %s for reconsideration, I didn't touch it this time for whatever reason" % data_out['directory'])
 	logProcQueue.write(queuemessage)
