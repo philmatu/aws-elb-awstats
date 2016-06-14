@@ -42,10 +42,12 @@ import sys
 import urllib.request
 import boto
 import boto.ec2
+import boto.ec2.cloudwatch
 import boto.vpc
 import boto.ec2.networkinterface
 from boto.s3.key import Key
 import configparser
+import datetime
 
 #global variables
 CMD1 = False
@@ -205,6 +207,22 @@ def getDNSFromInstanceID(instanceid, ec2connection):
 		return instance.public_dns_name
 	return ""
 
+def getCPUUtilizationOnInstance(instanceid):
+	cw = boto.ec2.cloudwatch.connect_to_region(EC2_REGION,aws_access_key_id=EC2_AWS_ACCESS_KEY,aws_secret_access_key=EC2_AWS_SECRET_KEY)
+	data = cw.get_metric_statistics(
+		300,
+		datetime.datetime.utcnow() - datetime.timedelta(seconds=600),
+		datetime.datetime.utcnow(),
+		'CPUUtilization',
+		'AWS/EC2',
+		'Average',
+		dimensions={'InstanceId':[instanceid]}
+	)
+	cw.close()
+	if len(data) > 0:
+		return data[0]['Average']
+	return -1
+
 def getRunningTaskOnInstance(instanceid, ec2connection):
 	instancedns = getDNSFromInstanceID(instanceid, ec2connection)	
 	if len(instancedns) < 2:
@@ -300,17 +318,19 @@ def do_listall():
 		out.append("-- SpotID: \"%s\"" % item["spotid"])
 	out.append("\nRunning Spot Requests")
 	for item in reqs["active"]:
+		instanceCPU = getCPUUtilizationOnInstance(item["instance"])
 		instanceIP = getDNSFromInstanceID(item["instance"], conn)
 		instanceWorkDir = getRunningTaskOnInstance(item["instance"], conn)
-		out.append("-- SpotID: \"%s\" InstanceID: \"%s\" WorkingOn (based on instance data): \"%s\" InstanceDNSName: \"%s\"" % (item["spotid"],item["instance"],instanceWorkDir,instanceIP))
+		out.append("-- SpotID: \"%s\" InstanceID: \"%s\" CPU \"%s\" WorkingOn (via Instance): \"%s\" InstanceDNSName: \"%s\"" % (item["spotid"],item["instance"],instanceCPU,instanceWorkDir,instanceIP))
 	out.append("\nCanceled Spot Requests with running instances, you should probably cancel these (this is likely a manual execution)!")
 	for item in reqs["cancelled"]:
 		instanceIP = getDNSFromInstanceID(item["instance"], conn)
 		if len(instanceIP) < 2:
 			out.append("-- SpotID: \"%s\" InstanceID: \"%s\" is already shut down / canceled" % (item["spotid"],item["instance"]))
 			continue
+		instanceCPU = getCPUUtilizationOnInstance(item["instance"])
 		instanceWorkDir = getRunningTaskOnInstance(item["instance"], conn)
-		out.append("-- SpotID: \"%s\" InstanceID: \"%s\" WorkingOn (based on instance data): \"%s\" InstanceDNSName: \"%s\"" % (item["spotid"],item["instance"],instanceWorkDir,instanceIP))
+		out.append("-- SpotID: \"%s\" InstanceID: \"%s\" CPU \"%s\" WorkingOn (via Instance): \"%s\" InstanceDNSName: \"%s\"" % (item["spotid"],item["instance"],instanceCPU,instanceWorkDir,instanceIP))
 	out.append("\nList of locks with instance ids (based on S3 directory search)")
 	for lock in getLocks():
 		parts = lock.split("~")
