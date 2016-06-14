@@ -260,6 +260,7 @@ for key in sorted(work):
 		if dayplus != key:
 			print("This date isn't in sequence from the previous date, stopping because AWStats doesn't handle backprocessing in between months, please trigger log processing...")
 			break
+		SEQUENCE = key #increment sequence
 		
 	direc = "tmpdata/%s"%data['path']
 	gziplogpath = "%s/%s" % (mypath,direc)
