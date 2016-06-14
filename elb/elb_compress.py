@@ -462,6 +462,8 @@ def clean(line):
 		return ""
 	if line.startswith("#"):
 		return "" #ignore comments
+	if len(line.split(" ")) < 6:
+		return "" #if there aren't many spaces, this is likely a malformed URL
 	line = cleanURLString(line)
 	line = convertTimeToLocal(line)
 	line = spacePorts.sub('\\1 \\2', line)
