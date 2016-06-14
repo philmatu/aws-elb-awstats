@@ -617,7 +617,18 @@ while True:
 		count = 0
 		data = json.loads(message)
 		DIRECTORY = data['directory'] #appended to src and dst path from configuration file
-		tasks = data['tasklist']
+		
+		if ("too_long" in data['tasklist']) and (data['tasklist'].strip() in "too_long"):
+			#do manual lookup of tasks because sqs limit is 256KB and my text is too long... 
+			#most this does is adds relookup of all files to ensure they're already complete (a few extra get requests, basically)
+			tasks = list()
+			dlist = getDirectoryList(key=SRC_AWS_ACCESS_KEY,sec=SRC_AWS_SECRET_KEY,inpath=SRC_PATH,d=data['directory'])
+			for key in dlist:
+				for item in dlist[key]:
+					tasks.append(item)
+			print("Queued up %d items for processing on directory %s manually, the scheduler said there was too much data to pass via queue (normal for big sites)" % (len(tasks),data['directory']))
+		else:
+			tasks = data['tasklist']
 	
 	if createLock(DIRECTORY):
 		if not directoryAlreadyCompleted(DIRECTORY):

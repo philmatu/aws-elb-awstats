@@ -128,6 +128,12 @@ def enqueue(dstdir, tasks):
 		print("The directory \"%s\" is already in the processing queue, skipping" % data_out['directory'])
 	else:
 		json_tasks = json.dumps(data_out)
+		if len(json_tasks) > 250000:
+			print("Task %s has too much data, going to send 'too_long' so the worker does a manual lookup of work to do" % (data_out['directory']))
+			data_out = {}
+			data_out['directory'] = "%s/" % dstdir
+			data_out['tasklist'] = "too_long"
+			json_tasks = json.dumps(data_out)
 		queuemessage = RawMessage()
 		queuemessage.set_body(json_tasks)
 		print("Enqueing Task %s" % data_out['directory'])
