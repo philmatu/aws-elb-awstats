@@ -412,7 +412,10 @@ def splitIPV6Ports(line):
 #logresolvmerge will automatically merge this data together on the day of the year where there is a time change / overlap
 def convertTimeToLocal(line):
 	parts = line.split(" ", 1)
-	gmt_dt = iso8601.parse_date(parts[0])
+	try:
+		gmt_dt = iso8601.parse_date(parts[0])
+	except:
+		return ""
 	et_dt = gmt_dt.astimezone(ET_TZ)
 	return ("%s %s" % (et_dt.strftime('%Y-%m-%d %H:%M:%S'), parts[1]))
 
@@ -468,6 +471,8 @@ def clean(line):
 		return "" #if there aren't many spaces, this is likely a malformed URL
 	line = cleanURLString(line)
 	line = convertTimeToLocal(line)
+	if len(line) < 20:
+		return ""
 	line = spacePorts.sub('\\1 \\2', line)
 	line = splitIPV6Ports(line)
 	if len(line) < 20:
