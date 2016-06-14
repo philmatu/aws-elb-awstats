@@ -337,10 +337,16 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 		for line in srcStream:
 			try:
 				line = bytes(line).decode('UTF-8')
+			except e:
+				print(e)
+				print("UNICODE EXCEPTION THROWN with line %s in file %s"%(line,srcFileKey))
+				syslog.syslog(syslog.LOG_ERR, "Unicode AWStatPARSE EXCEPTION THROWN with line %s, file %s"%(line,srcFileKey))
+				os.system('kill $PPID')
+			try:
 				cleanedString = clean(line)
 			except: 
-				syslog.syslog(syslog.LOG_ERR, "AWSTATSPARSE EXCEPTION THROWN with line %s"%line)
-				print("EXCEPTION THROWN with line %s in file %s"%(line,srcFileKey))
+				syslog.syslog(syslog.LOG_ERR, "AWSTATSPARSE EXCEPTION THROWN with line %s, file %s"%(line,srcFileKey))
+				print("PARSE EXCEPTION THROWN with line %s in file %s"%(line,srcFileKey))
 				os.system('kill $PPID')
 			logcount = logcount + 1
 			if logcount > 10000:
