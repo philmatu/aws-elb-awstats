@@ -620,6 +620,9 @@ while True:
 			with concurrent.futures.ProcessPoolExecutor() as executor:
 				results = executor.map(compress, tasks)
 				for value in results:
+					if value is False:
+						print("Compress returned False, it's either already complete or a blank file")
+						continue
 					with WRITE_LOCK:
 						print("Updating the status file now in the parent process with %s"%value)
 						updateStatusFile(value)
