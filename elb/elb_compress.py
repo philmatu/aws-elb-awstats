@@ -336,13 +336,8 @@ def compress(src): #takes in a filename that is in the SRCPATH directory and pla
 	logcount = 0
 	with smart_open.smart_open(srcFileKey) as srcStream:
 		for line in srcStream:
-			try:
-				line = bytes(line).decode('utf-16le')
-			except:
-				traceback.print_exc()
-				print("UNICODE EXCEPTION THROWN with line %s in file %s"%(line,srcFileKey))
-				syslog.syslog(syslog.LOG_ERR, "Unicode AWStatPARSE EXCEPTION THROWN with line %s, file %s"%(line,srcFileKey))
-				os.system('kill $PPID')
+			#simply  delete any bad characters, could be utf16-le, but we don't really need to save these characters
+			line = bytes(line).decode('utf-8', errors='ignore')
 			try:
 				cleanedString = clean(line)
 			except: 
