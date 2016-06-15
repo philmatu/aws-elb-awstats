@@ -103,7 +103,7 @@ def download(bucket, path, keys):
 		downloadFile(bucket, path, key)
 
 def runStats(directory):
-	command = "awstats -update -config=%s -LogFile=\"%s %s*.gz |\"" % (DOMAIN, LOGRESOLV, directory)
+	command = "ulimit -n 16384 && awstats -update -config=%s -LogFile=\"%s %s*.gz |\"" % (DOMAIN, LOGRESOLV, directory)
 	os.system(command)
 
 def updateLastPositionFile(newdatestamp):
