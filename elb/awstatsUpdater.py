@@ -162,7 +162,7 @@ today = datetime.datetime.now().strftime('%Y%m%d')
 if sd is not False:
 	startdate = datetime.datetime.strptime(sd, "%Y%m%d").date()
 	enddate = datetime.datetime.strptime(today, "%Y%m%d").date()
-
+FIRST_DATE_HANDLED = False
 work = {}
 
 lastdateseen = None
@@ -216,8 +216,8 @@ for year in bucket.list(prefix=DST_PATH[DST_PATH.index('/')+1:], delimiter='/'):
 					allowed = False #if a directory is locked, don't allow awstats processing of it!
 					break #get out of the for loop looking at files in this directory
 				files.append(fname)
-				
-			if not allowed:
+			
+			if FIRST_DATE_HANDLED and not allowed:
 				if lastdateseen is None:
 					lastdateseen = procdate
 				else:
@@ -227,18 +227,22 @@ for year in bucket.list(prefix=DST_PATH[DST_PATH.index('/')+1:], delimiter='/'):
 					lastdateseen = min(dtseen)
 				continue #next day
 
+
 			items = {"path":day.name,"files":files}
 
 			if sd is False:
 				work[procdate] = items
+				FIRST_DATE_HANDLED = True
 			
 			#if there is a start date specified somewhere, make sure to adhere to it -> now
 			if sd is not False:
 				if startdate <= procdate <= enddate:
 					work[procdate] = items
+					FIRST_DATE_HANDLED = True
 			else:
 				#processing everything...
 				work[procdate] = items
+				FIRST_DATE_HANDLED = True
 
 mypythonscript = os.path.realpath(__file__)
 mypath = mypythonscript[:mypythonscript.rindex('/')]
