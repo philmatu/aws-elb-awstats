@@ -209,8 +209,6 @@ for year in bucket.list(prefix=DST_PATH[DST_PATH.index('/')+1:], delimiter='/'):
 				if startdate > procdate:
 					continue
 
-			print(procdate)
-
 			#get directory listing of files (except status file and lock file)
 			files = list()
 			allowed = False
