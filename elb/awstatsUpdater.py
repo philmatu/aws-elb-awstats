@@ -205,6 +205,12 @@ for year in bucket.list(prefix=DST_PATH[DST_PATH.index('/')+1:], delimiter='/'):
 				if sd not in dirkey:
 					continue
 			
+			if START_PROCESS is not False:
+				if startdate > procdate:
+					continue
+
+			print(procdate)
+
 			#get directory listing of files (except status file and lock file)
 			files = list()
 			allowed = False
@@ -272,6 +278,10 @@ for key in sorted(work):
 		
 	direc = "tmpdata/%s"%data['path']
 	gziplogpath = "%s/%s" % (mypath,direc)
+	
+	if len(data['files']) < 3:#account for possible lock and status file, there should be more than 1 file here anyways!
+		print("Nothing to do for dir %s, skipping"%direc)
+		continue
 
 	os.makedirs(direc)
 	download(bucket, direc, data['files'])
