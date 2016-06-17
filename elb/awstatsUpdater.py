@@ -204,7 +204,7 @@ for year in bucket.list(prefix=DST_PATH[DST_PATH.index('/')+1:], delimiter='/'):
 			if SAME_DAY:
 				if sd not in dirkey:
 					continue
-
+			
 			#get directory listing of files (except status file and lock file)
 			files = list()
 			allowed = False
