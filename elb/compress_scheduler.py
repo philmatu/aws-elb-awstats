@@ -311,6 +311,7 @@ if USE_AWSTATS_POSITION_FILE:
 	if os.path.exists(AWSTATS_LAST_ADDED_FILE):
 		with open(AWSTATS_LAST_ADDED_FILE, "r") as startfile:
 			for line in startfile:
+				line = line.strip()
 				if len(line) > 3: # line will be in YYYYMMDD or %Y%m%d
 					sy = line[:4]
 					sm = line[4:6]
