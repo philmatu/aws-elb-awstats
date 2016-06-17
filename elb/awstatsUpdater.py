@@ -196,11 +196,15 @@ for year in bucket.list(prefix=DST_PATH[DST_PATH.index('/')+1:], delimiter='/'):
 
 			if MONTH_ONLY:
 				if monthkey not in START_MONTH:
-					continue #don't process anything outside of this month
+					prevdate = procdate - datetime.timedelta(days=1)
+					prevdates = prevdate.strftime('%Y%m%d')
+					if START_MONTH not in prevdates:
+						continue #don't process anything outside of this month (except 1st of next month to get timezone offset data)
+
 			if SAME_DAY:
 				if sd not in dirkey:
 					continue
-	
+
 			#get directory listing of files (except status file and lock file)
 			files = list()
 			allowed = False
@@ -268,7 +272,7 @@ for key in sorted(work):
 		
 	direc = "tmpdata/%s"%data['path']
 	gziplogpath = "%s/%s" % (mypath,direc)
-	
+
 	os.makedirs(direc)
 	download(bucket, direc, data['files'])
 	runStats(gziplogpath)
