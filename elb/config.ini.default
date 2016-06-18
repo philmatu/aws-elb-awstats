@@ -15,6 +15,7 @@ QUEUE_NAME = prod-log-compress
 INCOMPLETE_TASKS_QUEUE_NAME = prod-log-compress-incomplete-tasks
 QUEUE_AWS_ACCESS_KEY = ACCESSSQSKEY
 QUEUE_AWS_SECRET_KEY = SECRETSQSKEY
+WORKER_EXIT_AFTER_DONE = 1
 WORKER_STATUS_FILE_NAME = status.txt
 WORKER_WEB_ROOT = /var/www/html/
 AWSTATS_LAST_ADDED_FILE = /dirtorepo/aws-elb-awstats/elb/lastpos.txt

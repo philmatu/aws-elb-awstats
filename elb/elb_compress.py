@@ -5,6 +5,7 @@ ELB Log Compressor script
 Takes logs from a given directory and places a cleaned gzip of them in another s3 directory (which will also be compatible with awstats)
 Input Logs are fed in through Amazon SQS via the scheduler, this works across AWS Accounts!
 This is meant to be run on Spot Instances, meaning reduced cost to process huge amounts of data logs
+config.ini WORKER_EXIT_AFTER_DONE can be 1 for true, or 0 for false to exit or not after an empty queue
 ***
 
 #TODO: in the future, we need to catch the shutdown signal too from EC2 incase of accidental deletion
@@ -88,6 +89,7 @@ INCOMPLETE_TASKS_QUEUE_NAME = CONFIG.get('main', 'INCOMPLETE_TASKS_QUEUE_NAME')
 QUEUE_AWS_ACCESS_KEY = CONFIG.get('main', 'QUEUE_AWS_ACCESS_KEY')
 QUEUE_AWS_SECRET_KEY = CONFIG.get('main', 'QUEUE_AWS_SECRET_KEY')
 AWS_SPOT_CHECK_SLEEP_INTERVAL_SECONDS = int(CONFIG.get('main', 'AWS_SPOT_CHECK_SLEEP_INTERVAL_SECONDS'))
+WORKER_EXIT_AFTER_DONE = CONFIG.get('main', 'WORKER_EXIT_AFTER_DONE')
 WORKER_WEB_ROOT = CONFIG.get('main', 'WORKER_WEB_ROOT')
 WORKER_STATUS_FILE_NAME = CONFIG.get('main', 'WORKER_STATUS_FILE_NAME')
 #this script does not process anything from the current day due to added logic to keep track of hourly file dumps
@@ -611,6 +613,9 @@ while True:
 		count = 0
 		message = readQueue()
 		if message is None:
+			if "1" in WORKER_EXIT_AFTER_DONE:
+				print("No data in queue, exiting (config of WORKER_EXIT_AFTER_DONE = 1)")
+				os.system('kill $PPID')
 			print("No data in queue, waiting 30 seconds and trying again")
 			time.sleep(30) #5 second sleep, 25 second total wait from queue before we consider all tasks done for the day		
 			continue
