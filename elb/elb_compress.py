@@ -245,6 +245,9 @@ def validateStatusFile(completedFile, completionListVerify=None):
 		#make sure that everything we were going to complete is in the status file
 		status_file_text = bytes(status_file_key.get_contents_as_string()).decode(encoding='UTF-8')
 		for line in completionListVerify:
+			if len(line) < 1:
+				print("Empty task, ignoring")
+				continue
 			if line not in status_file_text.split("\n"):
 				print("The task \"%s\" isn't in the status file, this means I didn't complete successfully... I will notify the scheduler queue of my directory: %s" % (line,completedFile))
 				enQueueNonCompletedDirectory(DIRECTORY)#string in YYYY/MM/DD from the original queue
