@@ -1,6 +1,9 @@
 #/bin/sh
-cd /root/aws-elb-awstats/
-/usr/bin/git pull
-/usr/bin/wget http://controller.node.com/config.ini.file -O /root/aws-elb-awstats/elb/config.ini
-/usr/bin/nohup /usr/bin/python3 /root/aws-elb-awstats/elb/elb_compress.py /root/aws-elb-awstats/elb/config.ini &
-/usr/share/awstats/tools/awstats_buildstaticpages.pl config=bustime.mta.info -update -dir=/var/www/html/cache/
+if [ ! -f /root/aws-elb-awstats/elb/localupdatelock ]; then
+	/usr/bin/touch /root/aws-elb-awstats/elb/localupdatelock
+	/usr/bin/python3 /root/aws-elb-awstats/elb/compress_scheduler.py /root/aws-elb-awstats/elb/config.ini file
+	/usr/bin/python3 /root/aws-elb-awstats/elb/elb_compress.py /root/aws-elb-awstats/elb/config.ini
+	/usr/bin/python3 /root/aws-elb-awstats/elb/awstatsUpdater.py /root/aws-elb-awstats/elb/config.ini 
+	/bin/rm /root/aws-elb-awstats/elb/localupdatelock
+	/usr/share/awstats/tools/awstats_buildstaticpages.pl config=example.com -update -dir=/var/www/html/cache/
+fi
