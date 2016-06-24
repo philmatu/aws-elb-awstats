@@ -38,6 +38,8 @@ A sample ElasticLoadBalancer log line looks like:
 worker.sh needs to be set up on worker nodes that the controller can see on port 80, it should be modified to point to controller node (for job progress)
 on worker image, you can do crontab -e and add "@reboot /bin/sleep 60 ; /usr/bin/nohup /bin/sh /root/aws-elb-awstats/worker.sh  > /root/aws-elb-awstats/log.txt 2>&1 &"
 
+For cron static pages on huge sites, you need to mkdir /var/www/html/cache and use apache files in elb directory
+
 IAM Policy:
 Add EC2 Full Access and the following custom policy for s3/sqs
 {
