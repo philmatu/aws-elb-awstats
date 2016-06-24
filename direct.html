@@ -1,0 +1,19 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<body onload="bodyLoad();">
+
+<script type="text/javascript">
+     function bodyLoad(){
+          var p = getParameterByName("config");
+          var rootUrl = "/cache/awstats.";
+          var url = rootUrl + p + '.html';
+          window.location = url;
+     }
+	function getParameterByName(name) {
+    var match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+	}
+</script>
+
+</body>
+</html>

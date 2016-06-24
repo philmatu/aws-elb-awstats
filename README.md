@@ -20,6 +20,7 @@ ran: pip3 install smart_open
 ran: pip3 install configparser
 ran: apt-get install awstats
 ran: a2enmod cgi
+ran: a2enmod rewrite
 ran: cp awstats.conf /etc/apache2/conf-enabled/ && service apache2 restart
 
 copy cloudfront/awstats.domain.conf to /etc/awstats
@@ -39,6 +40,9 @@ worker.sh needs to be set up on worker nodes that the controller can see on port
 on worker image, you can do crontab -e and add "@reboot /bin/sleep 60 ; /usr/bin/nohup /bin/sh /root/aws-elb-awstats/worker.sh  > /root/aws-elb-awstats/log.txt 2>&1 &"
 
 For cron static pages on huge sites, you need to mkdir /var/www/html/cache and use apache files in elb directory
+Direct.htm is included, you'll also need to change awstats.conf for apache with this line instead of what's in the copied file (above):
+RedirectMatch ^/awstats/awstats.pl?(.*)$ http://stats.mtabuscis.net/direct.html$1
+
 
 IAM Policy:
 Add EC2 Full Access and the following custom policy for s3/sqs
