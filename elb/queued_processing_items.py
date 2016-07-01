@@ -39,7 +39,7 @@ def readProcessingQueueReadOnly():
 	qconn = boto.sqs.connect_to_region("us-east-1", aws_access_key_id=QUEUE_AWS_ACCESS_KEY, aws_secret_access_key=QUEUE_AWS_SECRET_KEY)
 	logProcQueue = qconn.get_queue(QUEUE_NAME)
 	if logProcQueue is None:
-		print("Checked the processing queue %s, nothing was there")
+		print("Checked the processing queue %s, nothing was there", QUEUE_NAME)
 		return list()
 	out = set()#ensures unique values
 	#NOTE: calling this will cause all messages to disappear for about 30 seconds, workers cycle, so they'll pick up a minute or so later
