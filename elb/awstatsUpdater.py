@@ -87,14 +87,20 @@ def downloadFile(bucket, path, key):
 	outfilename = "%s%s" % (path,key)
 	
 	#NOTE: download locally to machine, ensure enough disk space exists!
-	with open(outfilename, "wb") as outfile:
-		with smart_open.smart_open(k) as stream:
-			#gzip uncompress / write, if you wish to manually 
-			#for chunk in stream_gzip_decompress(stream):
-
-			#just write compressed file
-			for chunk in stream:
-				outfile.write(chunk)
+	while(1):
+		try:
+			with open(outfilename, "wb") as outfile:
+				with smart_open.smart_open(k) as stream:
+					#gzip uncompress / write, if you wish to manually 
+					#for chunk in stream_gzip_decompress(stream):
+		
+					#just write compressed file
+					for chunk in stream:
+						outfile.write(chunk)
+			break #if successful break
+		except:
+			print("The file download for %s failed, trying again" % (outfilename))
+			continue # if we find a socket timeout, try again
 	print ("finished downloading the file %s" % outfilename)
 
 def download(bucket, path, keys):
@@ -282,7 +288,12 @@ for key in sorted(work):
 		continue
 
 	os.makedirs(direc)
-	download(bucket, direc, data['files'])
+	try:
+		download(bucket, direc, data['files'])
+	except:
+		shutil.rmtree(direc[:direc.index('/')])
+		download(bucket, direc, data['files'])
+		
 	runStats(gziplogpath)
 	updateLastPositionFile(key.strftime('%Y%m%d'))#string in format YYYYMMDD
 	shutil.rmtree(direc[:direc.index('/')])
