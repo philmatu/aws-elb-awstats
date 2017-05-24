@@ -436,6 +436,8 @@ def convertTimeToLocal(line):
 def cleanURLString(line):
 	#cleans quotes (" and ') from the URL string that users can enter
 	ind_st = line.find("\"GET") +1#remove quote
+	if(ind_st == 0):
+		ind_st = line.find("\"POST") +1#remove quote
 	ind_end = line.rfind("HTTP/1.1\"") -1#remove quote
 	data = line[ind_st:ind_end]
 	data = data.replace("\"","")
